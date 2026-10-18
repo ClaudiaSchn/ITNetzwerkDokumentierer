@@ -1,0 +1,45 @@
+@startuml uc_03_topologie
+title Netzwerkdokumentation – Bereich Topologie
+left to right direction
+
+actor "IT-Mitarbeiter" as IT
+
+rectangle "Topologie" {
+  usecase "Positionstypen verwalten" as UC_TYP
+  usecase "Position erfassen" as UC_POS
+  usecase "Position bearbeiten\n(verschieben, umbenennen)" as UC_POS_B
+  usecase "Position löschen" as UC_POS_L
+  usecase "Verbindung anlegen\n(im Übersichtsmodus)" as UC_VERB
+  usecase "Verbindung löschen" as UC_VERB_L
+  usecase "Plan mit Positionen anzeigen" as UC_ANZ
+
+  usecase "Positionstyp wählen" as UC_TYP_W
+  usecase "Stockwerke zusammenfassen\n(Übersicht)" as UC_STOCK
+}
+
+IT --> UC_TYP
+IT --> UC_POS
+IT --> UC_POS_B
+IT --> UC_POS_L
+IT --> UC_VERB
+IT --> UC_VERB_L
+IT --> UC_ANZ
+
+UC_POS ..> UC_TYP_W : <<include>>
+UC_STOCK ..> UC_ANZ : <<extend>>
+
+legend bottom
+  **Positionstypen verwalten:** Typen (Rack, Bodendose, Richtfunksender …) können selbst angelegt werden.
+  **Position erfassen:** Klick in einen Plan. Benutzer vergibt eine Bezeichnung (z.B. «Serverraum 1», «HV4»), eindeutig pro Standort.
+  Im Hintergrund gespeichert: technische ID und absolute Koordinate (x, y, Stockwerk).
+  **Position löschen:** Gesperrt, solange Verbindungen oder Geräte an der Position hängen.
+  **Plan mit Positionen anzeigen:** Eine Position erscheint auf allen Plänen, deren Bereich ihre Koordinate abdeckt
+  und deren Stockwerk passt.
+  **Stockwerke zusammenfassen:** Übersicht über alle Stockwerke hinweg,
+  z.B. Weg vom Serverraum im 3. OG zum Verteiler im UG. Jeder Plan kann in den Übersichtsmodus
+  geschaltet werden, der Masterplan ist immer im Übersichtsmodus.
+  **Verbindung anlegen:** Nur im Übersichtsmodus (auf jedem Plan möglich). Zwei Positionen anwählen.
+  Nur «Verbindung existiert», kein Leitungsverlauf, keine Ausführungsart.
+endlegend
+
+@enduml

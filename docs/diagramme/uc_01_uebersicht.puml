@@ -1,0 +1,63 @@
+@startuml uc_01_uebersicht
+title Netzwerkdokumentation – Use-Case-Übersicht (Phase 1)
+left to right direction
+skinparam packageStyle rectangle
+
+actor "IT-Mitarbeiter" as IT
+actor "Betrachter (mobil)" as BET
+IT --|> BET
+
+rectangle "Netzwerkdokumentation" {
+
+  package "Pläne" {
+    usecase "Standort anlegen" as UC_STANDORT
+    usecase "Masterplan festlegen" as UC_MASTER
+    usecase "Plan referenzieren" as UC_REF
+  }
+
+  package "Topologie" {
+    usecase "Position erfassen" as UC_POSITION
+    usecase "Verbindung anlegen" as UC_VERB
+  }
+
+  package "Infrastruktur" {
+    usecase "Gerät platzieren" as UC_GERAET
+    usecase "Medium zuweisen" as UC_MEDIUM
+    usecase "Medium anschliessen" as UC_ANSCHL
+  }
+
+  package "Auswertung" {
+    usecase "Weg suchen" as UC_WEG
+    usecase "Strecke verfolgen" as UC_STRECKE
+    usecase "Freie Kapazität anzeigen" as UC_FREI
+    usecase "Kommentare bearbeiten" as UC_KOMM_B
+  }
+
+  package "Vor Ort (mobil)" {
+    usecase "Netz ansehen" as UC_ANSEHEN
+    usecase "Kommentar erfassen" as UC_KOMM
+  }
+}
+
+IT --> UC_STANDORT
+IT --> UC_MASTER
+IT --> UC_REF
+IT --> UC_POSITION
+IT --> UC_VERB
+IT --> UC_GERAET
+IT --> UC_MEDIUM
+IT --> UC_ANSCHL
+IT --> UC_WEG
+IT --> UC_STRECKE
+IT --> UC_FREI
+IT --> UC_KOMM_B
+
+BET --> UC_ANSEHEN
+BET --> UC_KOMM
+
+legend bottom
+  Details siehe Diagramme 02 Pläne, 03 Topologie, 04 Infrastruktur, 05 Auswertung.
+  Phase 2 (nicht enthalten): VLANs, Etiketten drucken, Endgeräte erfassen, Fotos/Dokumente, Benutzer und Rollen.
+endlegend
+
+@enduml

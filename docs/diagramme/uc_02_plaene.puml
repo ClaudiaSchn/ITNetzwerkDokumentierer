@@ -1,0 +1,53 @@
+@startuml uc_02_plaene
+title Netzwerkdokumentation – Bereich Pläne
+left to right direction
+
+actor "IT-Mitarbeiter" as IT
+
+rectangle "Pläne" {
+  usecase "Standort anlegen" as UC_STANDORT
+  usecase "Masterplan festlegen" as UC_MASTER
+  usecase "Plan referenzieren" as UC_REF
+  usecase "Plan ersetzen\n(neue Planversion)" as UC_ERSETZEN
+  usecase "Über Passpunkte\nreferenzieren" as UC_REF_PASS
+  usecase "Mit eigenem Massstab\nreferenzieren" as UC_REF_EIGEN
+  usecase "Lage und Drehung angeben" as UC_LAGE
+
+  usecase "Plan importieren (PDF)" as UC_IMPORT
+  usecase "Massstab bestimmen" as UC_MASSSTAB
+  usecase "Passpunkte setzen" as UC_PASS
+  usecase "Referenz prüfen\n(Kontrollstrecke)" as UC_PRUEFEN
+}
+
+IT --> UC_STANDORT
+IT --> UC_MASTER
+IT --> UC_REF
+IT --> UC_ERSETZEN
+
+UC_MASTER ..> UC_IMPORT : <<include>>
+UC_MASTER ..> UC_MASSSTAB : <<include>>
+UC_REF ..> UC_IMPORT : <<include>>
+UC_REF_PASS --|> UC_REF
+UC_REF_EIGEN --|> UC_REF
+UC_REF_PASS ..> UC_PASS : <<include>>
+UC_REF_EIGEN ..> UC_MASSSTAB : <<include>>
+UC_REF_EIGEN ..> UC_LAGE : <<include>>
+UC_ERSETZEN ..> UC_REF : <<include>>
+UC_PRUEFEN ..> UC_REF : <<extend>>
+
+legend bottom
+  **Masterplan festlegen:** Pro Standort genau ein Masterplan. Absoluter Nullpunkt (0,0,0) an markantem Punkt.
+  Massstab über zwei bekannte Strecken (x- und y-Richtung). Stockwerk fix 0.
+  **Plan referenzieren:** Bezug = Masterplan oder bereits referenzierter Plan (Kette, z.B. Raum → Geschoss → Campus).
+  Jeder Plan hat einen eigenen Massstab. Stockwerk (z) Pflicht, Vorgabe 0: 0 = EG, 1 = 1.OG, -1 = 1.UG.
+  **Über Passpunkte referenzieren:** Standardfall, Plan ist auf Bezugsplan erkennbar.
+  Zwei Passpunkte → Verschiebung, Drehung, Massstab.
+  **Mit eigenem Massstab referenzieren:** Fallback, Plan auf keinem Bezugsplan erkennbar.
+  Massstab über bekannte Strecken im Plan selbst.
+  **Lage und Drehung angeben:** Relativer Nullpunkt per Klick auf Bezugsplan oder Koordinaten in Metern;
+  Drehung als Winkel oder Richtung auf beiden Plänen.
+  **Plan importieren:** Nur einseitige PDFs.
+  **Referenz prüfen:** Nachmessen einer bekannten Strecke zur Kontrolle der Referenzierung.
+endlegend
+
+@enduml

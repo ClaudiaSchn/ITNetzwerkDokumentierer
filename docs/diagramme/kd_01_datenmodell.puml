@@ -1,0 +1,185 @@
+@startuml kd_01_datenmodell
+title Netzwerkdokumentation – Datenmodell (Klassendiagramm, Phase 1)
+hide methods
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam nodesep 60
+skinparam ranksep 50
+
+package "Pläne" {
+  class Standort {
+    id
+    name
+  }
+
+  class Plan {
+    id
+    bezeichnung
+    pdfDatei
+    stockwerk : int
+    istMasterplan : bool
+    methode : Referenzierungsmethode
+    massstab : double
+    drehung : double
+    versatzX : double
+    versatzY : double
+    aktiv : bool
+  }
+
+  class Passpunkt {
+    nummer : int
+    planX : double
+    planY : double
+    bezugX : double
+    bezugY : double
+  }
+
+  enum Referenzierungsmethode {
+    MASTER
+    PASSPUNKTE
+    EIGENER_MASSSTAB
+  }
+}
+
+package "Topologie" {
+  class Position {
+    id
+    bezeichnung
+    x : double
+    y : double
+    stockwerk : int
+  }
+
+  class Verbindung {
+    id
+  }
+
+  class Kommentar {
+    id
+    text
+    verfasser
+    status : Kommentarstatus
+    erstelltAm
+  }
+
+  enum Kommentarstatus {
+    OFFEN
+    ERLEDIGT
+  }
+}
+
+package "Infrastruktur" {
+  class Geraet {
+    id
+    bezeichnung
+  }
+
+  class Port {
+    id
+    nummer : int
+    seite : Portseite
+    bezeichnung
+  }
+
+  enum Portseite {
+    EINZEL
+    VORNE
+    HINTEN
+  }
+
+  class Medium {
+    id
+    kabelnummer
+    anzahlAnschluesse : int
+  }
+
+  class Anschluss {
+    id
+    ende : Mediumende
+    nummer : int
+  }
+
+  enum Mediumende {
+    A
+    B
+  }
+}
+
+package "Stammdaten (selbst verwaltbar)" {
+  class Positionstyp {
+    id
+    name
+  }
+
+  class Geraetetyp {
+    id
+    name
+    kategorie : Geraetekategorie
+  }
+
+  enum Geraetekategorie {
+    DURCHGANG
+    ENDGERAET
+  }
+
+  class Portvorlage {
+    nummer : int
+    seite : Portseite
+  }
+
+  class Portart {
+    id
+    name
+  }
+
+  class Medientyp {
+    id
+    name
+  }
+}
+
+' --- Pläne
+Standort "1" *-- "1..*" Plan
+Plan "0..*" --> "0..1" Plan : bezugsplan
+Plan "0..1" --> "0..1" Plan : ersetzt
+Plan "1" *-- "0..2" Passpunkt
+
+' --- Topologie
+Standort "1" *-- "0..*" Position
+Position "0..*" --> "1" Positionstyp
+Position "1" *-- "0..*" Kommentar
+Verbindung "0..*" --> "1" Position : positionA
+Verbindung "0..*" --> "1" Position : positionB
+
+' --- Infrastruktur
+Position "1" *-- "0..*" Geraet
+Geraet "0..*" --> "1" Geraetetyp
+Geraet "1" *-- "1..*" Port
+Port "0..*" --> "1" Portart
+Verbindung "1" *-- "0..*" Medium
+Medium "0..*" --> "1" Medientyp
+Medium "1" *-- "2..*" Anschluss
+Anschluss "0..1" -- "0..1" Port : belegt
+
+' --- Stammdaten
+Geraetetyp "1" *-- "1..*" Portvorlage
+Portvorlage "0..*" --> "1" Portart
+Medientyp "0..*" --> "1..*" Portart : erlaubt
+
+legend bottom
+  **Regeln (Invarianten)**
+  1. Pro Standort genau ein Plan mit istMasterplan = true; dieser hat stockwerk = 0, keinen Bezugsplan, methode = MASTER.
+  2. Bezugsplan muss zum selben Standort gehören. Keine Zyklen in der Bezugskette.
+  3. Position speichert absolute Koordinaten (Masterplan-System, Meter) und ist an keinen Plan gebunden.
+  4. Position.bezeichnung und Medium.kabelnummer sind je Standort eindeutig.
+  5. Verbindung: positionA ≠ positionB, beide am selben Standort (Übergänge zwischen Standorten vorerst nicht erfasst).
+  6. Medium hat pro Ende anzahlAnschluesse Anschlüsse (Nummer 1…n), insgesamt 2 × n.
+  7. Anschluss mit ende = A darf nur an einen Port eines Geräts an positionA, ende = B nur an positionB.
+  8. Portart des Ports muss für den Medientyp erlaubt sein. Ein Port ist mit höchstens einem Anschluss belegt.
+  9. Durchgangsgerät: pro Nummer ein Port VORNE und ein Port HINTEN (Durchgang intern). Endgerät: Ports EINZEL.
+  10. Position, Gerät, Medium nur löschbar, wenn nichts mehr daran hängt bzw. belegt ist.
+  11. Passpunkte: Plan- und Bezugskoordinaten werden gespeichert, damit die Referenzierung nachvollziehbar und korrigierbar bleibt.
+  12. Mehrbenutzerbetrieb: Jede änderbare Tabelle erhält eine Versionsnummer (optimistisches Sperren, technisch, nicht dargestellt).
+endlegend
+
+@enduml

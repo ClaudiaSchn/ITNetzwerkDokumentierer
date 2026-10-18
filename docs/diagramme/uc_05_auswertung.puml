@@ -1,0 +1,53 @@
+@startuml uc_05_auswertung
+title Netzwerkdokumentation – Bereich Auswertung und vor Ort
+left to right direction
+
+actor "IT-Mitarbeiter" as IT
+actor "Betrachter (mobil)" as BET
+IT --|> BET
+
+rectangle "Auswertung" {
+  usecase "Weg suchen" as UC_WEG
+  usecase "Strecke verfolgen" as UC_STRECKE
+  usecase "Freie Kapazität\nan Position/Gerät anzeigen" as UC_FREI
+  usecase "Freie Kapazität\nzwischen Positionen anzeigen" as UC_FREI_GES
+  usecase "Kommentare bearbeiten\n(Status setzen)" as UC_KOMM_B
+  usecase "Offene Kommentare anzeigen" as UC_KOMM_OFFEN
+
+  usecase "Weg im Plan markieren" as UC_MARK
+  usecase "Nur Wege mit freier\nKapazität" as UC_FILTER
+}
+
+rectangle "Vor Ort (mobil)" {
+  usecase "Netz ansehen" as UC_ANSEHEN
+  usecase "Kommentar erfassen" as UC_KOMM
+}
+
+IT --> UC_WEG
+IT --> UC_STRECKE
+IT --> UC_FREI
+IT --> UC_FREI_GES
+IT --> UC_KOMM_B
+IT --> UC_KOMM_OFFEN
+
+BET --> UC_ANSEHEN
+BET --> UC_KOMM
+
+UC_WEG ..> UC_MARK : <<include>>
+UC_STRECKE ..> UC_MARK : <<include>>
+UC_FILTER ..> UC_WEG : <<extend>>
+
+legend bottom
+  **Weg suchen:** Von Position zu Position (z.B. «Serverraum 1 → HV4») oder von Gerät/Port zu Gerät/Port.
+  Sucht über die Verbindungen der Topologie.
+  **Nur Wege mit freier Kapazität:** Filter, zeigt nur Wege, auf denen durchgehend freie Medien und Ports verfügbar sind.
+  **Weg im Plan markieren:** Ergebnis wird im Übersichtsmodus hervorgehoben.
+  **Strecke verfolgen:** Ausgehend von einem Port die durchgehende Strecke über Durchgangsgeräte
+  (Patchpanel, Dose …) bis zum nächsten Endgerät.
+  **Freie Kapazität an Position/Gerät:** Freie Ports und freie Medienanschlüsse einer Position oder eines Geräts.
+  **Freie Kapazität zwischen Positionen:** Gesamtübersicht, z.B. alle freien LWL-Fasern zwischen Gebäude A und B.
+  **Kommentar erfassen:** Hängt an einer Position, Status «offen».
+  **Kommentare bearbeiten:** Im Büro auswerten, Korrekturen vornehmen, Status auf «erledigt» setzen.
+endlegend
+
+@enduml

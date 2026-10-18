@@ -1,0 +1,62 @@
+@startuml kp_01_komponenten
+title Netzwerkdokumentation – Komponenten und Betrieb (Phase 1)
+skinparam componentStyle rectangle
+skinparam nodesep 40
+skinparam ranksep 50
+
+actor "IT-Mitarbeiter\n(PC)" as IT
+actor "Betrachter\n(Tablet/Handy)" as BET
+
+node "Linux-VM (Betrieb) bzw. Docker auf Arbeits-PC (Test)" as HOST {
+
+  node "Container: Caddy" as C_CADDY {
+    component "Reverse Proxy\nHTTPS, gemeinsamer Login" as CADDY
+    component "Web-Frontend\nVue 3 + TypeScript\n(statische Dateien)" as FE
+  }
+
+  node "Container: Backend" as C_API {
+    component "REST-API\nASP.NET Core (C#, .NET)" as API
+    component "Pläne\nImport, PDF → Bild,\nReferenzierung" as M_PLAN
+    component "Topologie\nPositionen, Verbindungen" as M_TOPO
+    component "Infrastruktur\nGeräte, Ports, Medien,\nAnschlussprüfung" as M_INFRA
+    component "Auswertung\nWegsuche, Strecke verfolgen,\nfreie Kapazität" as M_AUSW
+    component "Datenzugriff\nEntity Framework Core\n+ Npgsql" as DAL
+  }
+
+  node "Container: PostgreSQL" as C_DB {
+    database "Datenbank\nPostgreSQL" as DB
+  }
+
+  folder "Volume: Dateiablage\nPDFs, Planbilder" as FILES
+  folder "Volume: Datenbankdaten" as DBDATA
+}
+
+IT --> CADDY : HTTPS
+BET --> CADDY : HTTPS
+CADDY --> FE : liefert aus
+CADDY --> API : /api
+
+API --> M_PLAN
+API --> M_TOPO
+API --> M_INFRA
+API --> M_AUSW
+M_PLAN --> DAL
+M_TOPO --> DAL
+M_INFRA --> DAL
+M_AUSW --> DAL
+M_PLAN --> FILES
+DAL --> DB : SQL
+DB --> DBDATA
+
+legend bottom
+  **Frontend:** Eine Webanwendung mit zwei Oberflächen: Erfassung (PC) und vereinfachte Anzeige mit Kommentar (mobil).
+  Planansicht mit Leaflet (Zoom, Verschieben, Positionen, Verbindungen, Wege).
+  **Caddy:** HTTPS im Firmen-LAN, gemeinsamer Login (Phase 1), liefert das Frontend aus, leitet /api an das Backend.
+  **Backend:** Geschäftsregeln, Koordinatenumrechnung (Plan ↔ absolut), Wegsuche als Graphensuche.
+  PDF wird beim Import einmalig in ein Planbild umgewandelt.
+  **PostgreSQL:** Eindeutigkeitsregeln als Datenbank-Constraints, optimistisches Sperren über Versionsspalte,
+  mehrschrittige Vorgänge in Transaktionen.
+  **Alles Open Source.** Start mit docker compose; gleicher Aufbau für Test (Arbeits-PC/zuhause) und Betrieb (VM).
+endlegend
+
+@enduml
