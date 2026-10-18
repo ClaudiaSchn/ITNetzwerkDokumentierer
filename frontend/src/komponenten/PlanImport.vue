@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { api, type Plan, type PlanListe } from '../api'
 import { stockwerkText } from '../format'
+import { planText } from '../plaene'
 
 /** Seitenleiste «Plan importieren»: weiteres PDF (Gebäude, Geschoss, Raum) mit Stockwerk und Bezugsplan */
 const props = defineProps<{ standortId: number; plaene: PlanListe[]; vorschlagBezug: number | null }>()
@@ -46,8 +47,6 @@ async function importieren() {
     laedtHoch.value = false
   }
 }
-
-const planText = (p: PlanListe) => `${p.bezeichnung}${p.istMasterplan ? ' (Masterplan)' : ` · ${stockwerkText(p.stockwerk)}`}`
 </script>
 
 <template>

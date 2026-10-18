@@ -64,6 +64,45 @@ export function richteAus(p1: Punkt, w1: { x: number; y: number }, p2: Punkt, w2
   }
 }
 
+/** Winkel auf −180° … 180° bringen */
+export function normiereWinkel(grad: number): number {
+  let g = grad % 360
+  if (g <= -180) g += 360
+  if (g > 180) g -= 360
+  return g
+}
+
+/** Richtung von a nach b im Plan in Grad, gemessen wie absolut (0° = rechts, 90° = oben) */
+export function richtungImPlan(a: Punkt, b: Punkt): number {
+  return (Math.atan2(-(b.v - a.v), b.u - a.u) * 180) / Math.PI
+}
+
+/** Richtung von a nach b absolut in Grad (0° = +x, 90° = +y) */
+export function richtungAbsolut(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI
+}
+
+/** Lage bei bekanntem Massstab und Drehung: Ankerpunkt im Plan liegt absolut bei `ankerAbsolut` (wie Geometrie.MitEigenemMassstab) */
+export function mitEigenemMassstab(massstab: number, drehung: number, anker: Punkt, ankerAbsolut: { x: number; y: number }): Lage {
+  const t = (drehung * Math.PI) / 180
+  const sin = Math.sin(t)
+  const cos = Math.cos(t)
+  return {
+    massstab,
+    drehung: normiereWinkel(drehung),
+    versatzX: ankerAbsolut.x - massstab * (anker.u * cos + anker.v * sin),
+    versatzY: ankerAbsolut.y - massstab * (anker.u * sin - anker.v * cos)
+  }
+}
+
+/** Zahl aus einer Texteingabe («12,5» oder «12.5»); leer oder ungültig → null */
+export function zahlAus(text: string): number | null {
+  const t = text.replace(',', '.').replace('−', '-').trim()
+  if (!t) return null
+  const z = Number(t)
+  return Number.isFinite(z) ? z : null
+}
+
 /** Drehung lesbar, z.B. «−90.0°» (0 bei sehr kleinen Werten) */
 export function formatDrehung(grad: number): string {
   const g = Math.abs(grad) < 0.05 ? 0 : grad

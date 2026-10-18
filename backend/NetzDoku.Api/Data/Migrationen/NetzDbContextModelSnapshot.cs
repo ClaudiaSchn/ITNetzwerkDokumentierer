@@ -444,6 +444,11 @@ namespace NetzDoku.Api.Data.Migrationen
                         .HasColumnType("double precision")
                         .HasColumnName("drehung");
 
+                    b.Property<string>("EigenerMassstabDaten")
+                        .HasMaxLength(100)
+                        .HasColumnType("jsonb")
+                        .HasColumnName("eigener_massstab_daten");
+
                     b.Property<int?>("ErsetztPlanId")
                         .HasColumnType("integer")
                         .HasColumnName("ersetzt_plan_id");

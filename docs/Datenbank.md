@@ -15,7 +15,7 @@ Das Schema setzt das Klassendiagramm [`diagramme/kd_01_datenmodell.puml`](diagra
 | Tabelle | Inhalt | Wichtige Spalten |
 | --- | --- | --- |
 | `standorte` | Firmenstandorte | `name` (eindeutig) |
-| `plaene` | Pläne (PDF) mit Referenzierung | `standort_id`, `ist_masterplan`, `methode`, `stockwerk`, `massstab`, `drehung`, `versatz_x/y`, `bezugsplan_id`, `ersetzt_plan_id`, `aktiv`, `referenziert`, `pdf_datei`, `bild_datei`, `bild_breite`, `bild_hoehe` |
+| `plaene` | Pläne (PDF) mit Referenzierung | `standort_id`, `ist_masterplan`, `methode`, `stockwerk`, `massstab`, `drehung`, `versatz_x/y`, `bezugsplan_id`, `ersetzt_plan_id`, `aktiv`, `referenziert`, `pdf_datei`, `bild_datei`, `bild_breite`, `bild_hoehe`, `eigener_massstab_daten` (jsonb) |
 | `passpunkte` | gespeicherte Passpunkte einer Referenzierung | `plan_id`, `nummer` (1/2), `plan_x/y`, `bezug_x/y` |
 | `messstrecken` | bekannte Strecken der Kalibrierung (Masterplan, eigener Massstab) | `plan_id`, `nummer`, `u1/v1`, `u2/v2`, `laenge_meter` |
 | `positionen` | Rack, Bodendose … | `standort_id`, `positionstyp_id`, `bezeichnung`, `x`, `y`, `stockwerk` |
@@ -31,6 +31,8 @@ Das Schema setzt das Klassendiagramm [`diagramme/kd_01_datenmodell.puml`](diagra
 | `portvorlagen` | Ports einer Gerätevorlage | `geraetetyp_id`, `nummer`, `seite`, `portart_id` |
 
 Abweichung vom Klassendiagramm: `verbindungen` und `medien` tragen zusätzlich `standort_id`. Das ist nötig, damit die Datenbank die Eindeutigkeit der Kabelnummer pro Standort selbst prüfen kann, und vereinfacht Abfragen.
+
+Bei Methode «Eigener Massstab» steht der Massstab in `messstrecken`; Ankerpunkt (Klick im Bezugsplan oder Koordinate in Metern) und Drehung (Winkel oder Richtung in beiden Plänen) stehen als JSON in `eigener_massstab_daten`. So lässt sich die Lage nachvollziehen und bei Änderungen am Bezugsplan neu berechnen. Ein angeklickter Anker oder eine Richtung wandert mit dem Bezugsplan mit; eine eingegebene Koordinate und ein Winkel bleiben fest.
 
 Beim Import wird die PDF-Seite einmalig in ein PNG umgewandelt (`bild_datei`, längste Kante höchstens 6000 px, höchstens 200 dpi). Planeinheiten (u, v) sind Pixel dieses Bilds, Ursprung oben links, v nach unten. PDF und Bild liegen in der Planablage (Docker-Volume `plan-ablage`).
 

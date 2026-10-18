@@ -73,6 +73,7 @@ public class NetzDbContext(DbContextOptions<NetzDbContext> optionen) : DbContext
         {
             e.Property(p => p.PdfDatei).HasMaxLength(500);
             e.Property(p => p.BildDatei).HasMaxLength(500);
+            e.Property(p => p.EigenerMassstabDaten).HasColumnType("jsonb");
 
             e.HasOne(p => p.Standort).WithMany(s => s.Plaene)
                 .HasForeignKey(p => p.StandortId).OnDelete(DeleteBehavior.Restrict);

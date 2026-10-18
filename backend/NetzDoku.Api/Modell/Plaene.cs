@@ -64,6 +64,13 @@ public class Plan : Entitaet
     /// <summary>False, sobald der Plan durch eine neue Version ersetzt wurde.</summary>
     public bool Aktiv { get; set; } = true;
 
+    /// <summary>
+    /// Nur bei Methode «Eigener Massstab»: Angaben zu Lage und Drehung als JSON (siehe
+    /// <see cref="NetzDoku.Api.Dienste.EigenerMassstabDaten"/>). Der Massstab steht in den Messstrecken.
+    /// Gespeichert, damit die Lage nachvollziehbar bleibt und bei Änderungen am Bezugsplan neu berechnet werden kann.
+    /// </summary>
+    public string? EigenerMassstabDaten { get; set; }
+
     /// <summary>Plan, auf den dieser referenziert ist. Beim Masterplan leer.</summary>
     public int? BezugsplanId { get; set; }
     public Plan? Bezugsplan { get; set; }

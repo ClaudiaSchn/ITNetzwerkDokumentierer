@@ -55,7 +55,7 @@ public static class Geometrie
     {
         if (strecken.Count == 0) throw new ArgumentException("Mindestens eine Strecke nötig.", nameof(strecken));
 
-        var massstab = strecken.Sum(s => s.LaengeMeter) / strecken.Sum(s => s.PixelLaenge);
+        var massstab = MassstabAus(strecken);
         var jeStrecke = strecken.Select(s => s.Massstab).ToList();
         var abweichung = (jeStrecke.Max() - jeStrecke.Min()) / massstab * 100.0;
 
@@ -96,6 +96,42 @@ public static class Geometrie
             Drehung: Math.Atan2(ai, ar) * 180.0 / Math.PI,
             VersatzX: w1.X - (ar * p1.U + ai * p1.V),
             VersatzY: w1.Y - (ai * p1.U - ar * p1.V));
+    }
+
+    /// <summary>Massstab aus bekannten Strecken, nach Länge gewichtet (Summe Meter / Summe Pixel).</summary>
+    public static double MassstabAus(IReadOnlyList<BekannteStrecke> strecken)
+    {
+        if (strecken.Count == 0) throw new ArgumentException("Mindestens eine Strecke nötig.", nameof(strecken));
+        return strecken.Sum(s => s.LaengeMeter) / strecken.Sum(s => s.PixelLaenge);
+    }
+
+    /// <summary>
+    /// Lage bei bekanntem Massstab und bekannter Drehung: der Ankerpunkt im Plan liegt absolut bei
+    /// <paramref name="ankerAbsolut"/>. Daraus folgt der Versatz.
+    /// </summary>
+    public static Ausrichtung MitEigenemMassstab(double massstab, double drehung, Planpunkt anker, Weltpunkt ankerAbsolut)
+    {
+        var (sin, cos) = Math.SinCos(drehung * Math.PI / 180.0);
+        return new Ausrichtung(
+            massstab,
+            NormiereWinkel(drehung),
+            VersatzX: ankerAbsolut.X - massstab * (anker.U * cos + anker.V * sin),
+            VersatzY: ankerAbsolut.Y - massstab * (anker.U * sin - anker.V * cos));
+    }
+
+    /// <summary>Richtung von a nach b im Plan in Grad, gemessen wie absolut (0° = rechts, 90° = oben).</summary>
+    public static double RichtungImPlan(Planpunkt a, Planpunkt b) => Math.Atan2(-(b.V - a.V), b.U - a.U) * 180.0 / Math.PI;
+
+    /// <summary>Richtung von a nach b absolut in Grad (0° = +x, 90° = +y).</summary>
+    public static double RichtungAbsolut(Weltpunkt a, Weltpunkt b) => Math.Atan2(b.Y - a.Y, b.X - a.X) * 180.0 / Math.PI;
+
+    /// <summary>Winkel auf den Bereich −180° … 180° bringen.</summary>
+    public static double NormiereWinkel(double grad)
+    {
+        grad %= 360.0;
+        if (grad <= -180.0) grad += 360.0;
+        if (grad > 180.0) grad -= 360.0;
+        return grad;
     }
 
     public static Weltpunkt NachAbsolut(Plan plan, Planpunkt p)
