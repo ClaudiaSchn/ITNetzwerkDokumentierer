@@ -25,6 +25,9 @@ public record MasterKalibrierung(
     IReadOnlyList<double> MassstabJeStrecke,
     double AbweichungProzent);
 
+/// <summary>Lage eines Plans: Massstab (m/px), Drehung (Grad, −180…180) und Versatz (m).</summary>
+public record Ausrichtung(double Massstab, double Drehung, double VersatzX, double VersatzY);
+
 /// <summary>
 /// Umrechnungen zwischen Plan und absoluten Koordinaten.
 /// <para>
@@ -63,6 +66,36 @@ public static class Geometrie
             VersatzY: massstab * nullpunkt.V,
             jeStrecke,
             abweichung);
+    }
+
+    /// <summary>
+    /// Plan über zwei Passpunkte ausrichten: Zu jedem Punkt im Plan ist die absolute Lage bekannte
+    /// (aus dem Bezugsplan umgerechnet). Ergibt Massstab, Drehung und Versatz eindeutig.
+    /// </summary>
+    /// <remarks>
+    /// Rechnet mit komplexen Zahlen: z = u − i·v (Plan, v gespiegelt), w = x + i·y (absolut).
+    /// Die Abbildung ist w = Versatz + a·z mit a = Massstab · e^(iθ); aus zwei Paaren folgt
+    /// a = (w₂ − w₁) / (z₂ − z₁) und Versatz = w₁ − a·z₁.
+    /// </remarks>
+    public static Ausrichtung RichteAus(Planpunkt p1, Weltpunkt w1, Planpunkt p2, Weltpunkt w2)
+    {
+        var zr = p2.U - p1.U;
+        var zi = -(p2.V - p1.V);
+        var wr = w2.X - w1.X;
+        var wi = w2.Y - w1.Y;
+        var n = zr * zr + zi * zi;
+        if (n == 0) throw new ArgumentException("Die beiden Passpunkte im Plan fallen zusammen.");
+
+        var ar = (wr * zr + wi * zi) / n;
+        var ai = (wi * zr - wr * zi) / n;
+        var massstab = Math.Sqrt(ar * ar + ai * ai);
+        if (massstab == 0) throw new ArgumentException("Die beiden Passpunkte im Bezugsplan fallen zusammen.");
+
+        return new Ausrichtung(
+            massstab,
+            Drehung: Math.Atan2(ai, ar) * 180.0 / Math.PI,
+            VersatzX: w1.X - (ar * p1.U + ai * p1.V),
+            VersatzY: w1.Y - (ai * p1.U - ar * p1.V));
     }
 
     public static Weltpunkt NachAbsolut(Plan plan, Planpunkt p)

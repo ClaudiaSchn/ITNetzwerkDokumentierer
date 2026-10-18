@@ -101,3 +101,86 @@ button.zweitrangig {
   color: var(--text);
   border-color: var(--rand);
 }
+
+/* Seitenleisten rechts neben dem Plan (Plan importieren, referenzieren, Einstellungen) */
+.seitenleiste {
+  width: 21rem;
+  flex-shrink: 0;
+  overflow-y: auto;
+  background: var(--flaeche);
+  border-left: 1px solid var(--rand);
+  padding: 1rem 1.1rem 1.5rem;
+}
+.seitenleiste .kopf {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+.seitenleiste h3 {
+  font-size: 0.95rem;
+  margin: 0;
+}
+.seitenleiste label {
+  font-size: 0.85rem;
+}
+.seitenleiste .klein {
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+}
+.seitenleiste .klein-btn {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.85rem;
+}
+.seitenleiste .feld {
+  margin: 0.8rem 0;
+}
+.seitenleiste select,
+.seitenleiste input[type='number'] {
+  font: inherit;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+  background: var(--flaeche);
+}
+.seitenleiste .stockwerk {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.seitenleiste .stockwerk input {
+  width: 6rem;
+}
+.seitenleiste .abschnitt {
+  border-top: 1px solid var(--rand);
+  padding: 0.8rem 0;
+}
+.seitenleiste .wert {
+  margin: 0.35rem 0 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+}
+.seitenleiste .anleitung {
+  background: #ddf4ff;
+  border: 1px solid #54aeff;
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.9rem;
+}
+.seitenleiste .warnung {
+  color: #9a6700;
+  font-size: 0.9rem;
+}
+.seitenleiste .aktionen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+.seitenleiste .gefahr {
+  background: var(--flaeche);
+  color: var(--schlecht);
+  border-color: var(--schlecht);
+  margin-left: auto;
+}
