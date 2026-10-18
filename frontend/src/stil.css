@@ -1,0 +1,103 @@
+:root {
+  --text: #1f2328;
+  --text-leise: #59636e;
+  --hintergrund: #f6f7f9;
+  --flaeche: #ffffff;
+  --rand: #d1d9e0;
+  --akzent: #0969da;
+  --akzent-dunkel: #0550ae;
+  --gut: #1a7f37;
+  --schlecht: #cf222e;
+  --radius: 8px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--text);
+  background: var(--hintergrund);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: var(--akzent);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 0.5rem;
+  line-height: 1.25;
+}
+
+.inhalt {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.karte {
+  background: var(--flaeche);
+  border: 1px solid var(--rand);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+}
+
+.leise {
+  color: var(--text-leise);
+}
+
+.fehler {
+  color: var(--schlecht);
+  margin: 0.5rem 0 0;
+}
+
+.gut {
+  color: var(--gut);
+  font-weight: 600;
+}
+
+.schlecht {
+  color: var(--schlecht);
+  font-weight: 600;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+input[type='text'],
+input[type='file'] {
+  font: inherit;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+  background: var(--flaeche);
+}
+
+button {
+  font: inherit;
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--akzent-dunkel);
+  background: var(--akzent);
+  color: #fff;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+button.zweitrangig {
+  background: var(--flaeche);
+  color: var(--text);
+  border-color: var(--rand);
+}

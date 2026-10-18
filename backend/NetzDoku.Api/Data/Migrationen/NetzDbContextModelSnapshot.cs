@@ -369,6 +369,19 @@ namespace NetzDoku.Api.Data.Migrationen
                         .HasColumnType("integer")
                         .HasColumnName("bezugsplan_id");
 
+                    b.Property<int>("BildBreite")
+                        .HasColumnType("integer")
+                        .HasColumnName("bild_breite");
+
+                    b.Property<string>("BildDatei")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("bild_datei");
+
+                    b.Property<int>("BildHoehe")
+                        .HasColumnType("integer")
+                        .HasColumnName("bild_hoehe");
+
                     b.Property<double>("Drehung")
                         .HasColumnType("double precision")
                         .HasColumnName("drehung");

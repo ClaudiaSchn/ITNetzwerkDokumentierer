@@ -28,8 +28,15 @@ public class Plan : Entitaet
 
     public string Bezeichnung { get; set; } = "";
 
-    /// <summary>Pfad der PDF-Datei in der Planablage.</summary>
+    /// <summary>Dateiname des Original-PDFs in der Planablage.</summary>
     public string PdfDatei { get; set; } = "";
+
+    /// <summary>Dateiname des beim Import erzeugten Planbilds (PNG) in der Planablage.</summary>
+    public string? BildDatei { get; set; }
+
+    /// <summary>Grösse des Planbilds in Pixeln. Planeinheiten (u, v) sind Pixel dieses Bilds.</summary>
+    public int BildBreite { get; set; }
+    public int BildHoehe { get; set; }
 
     /// <summary>0 = EG, 1 = 1.OG, −1 = 1.UG. Masterplan immer 0.</summary>
     public int Stockwerk { get; set; }
