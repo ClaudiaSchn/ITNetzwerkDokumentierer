@@ -1,0 +1,54 @@
+@startuml uc_04_infrastruktur
+title Netzwerkdokumentation – Bereich Infrastruktur
+left to right direction
+
+actor "IT-Mitarbeiter" as IT
+
+rectangle "Infrastruktur" {
+  usecase "Portarten verwalten" as UC_PORTART
+  usecase "Medientypen verwalten" as UC_MEDTYP
+  usecase "Gerätetypen verwalten" as UC_GERTYP
+
+  usecase "Gerät platzieren" as UC_GERAET
+  usecase "Gerät entfernen" as UC_GERAET_L
+  usecase "Medium zuweisen" as UC_MEDIUM
+  usecase "Medium entfernen" as UC_MEDIUM_L
+  usecase "Medium anschliessen" as UC_ANSCHL
+  usecase "Anschluss lösen" as UC_LOESEN
+
+  usecase "Gerätetyp wählen\n(Ports werden erzeugt)" as UC_GERTYP_W
+  usecase "Anschluss prüfen" as UC_PRUEF
+}
+
+IT --> UC_PORTART
+IT --> UC_MEDTYP
+IT --> UC_GERTYP
+IT --> UC_GERAET
+IT --> UC_GERAET_L
+IT --> UC_MEDIUM
+IT --> UC_MEDIUM_L
+IT --> UC_ANSCHL
+IT --> UC_LOESEN
+
+UC_GERAET ..> UC_GERTYP_W : <<include>>
+UC_ANSCHL ..> UC_PRUEF : <<include>>
+
+legend bottom
+  **Portarten verwalten:** Selbst anlegbar, z.B. RJ45, LC, SC, SFP.
+  **Medientypen verwalten:** Selbst anlegbar, z.B. LWL Singlemode, LWL Multimode, Cu, Richtfunk
+  (Singlemode und Multimode sind getrennte Medientypen). Jeder Medientyp hat eine Liste erlaubter Portarten,
+  z.B. «LWL Singlemode → LC, SC».
+  **Gerätetypen verwalten:** Vorlage mit Kategorie (Durchgangsgerät oder Endgerät) und Ports mit Portart,
+  z.B. «Patchpanel 24× RJ45, Durchgang».
+  **Gerät platzieren:** An einer Position. Ports werden aus der Vorlage erzeugt.
+  Ports erhalten eine automatische Nummer und ein Feld Bezeichnung für die individuelle Beschriftung.
+  Bei Durchgangsgeräten hat jeder Port einen Ein- und einen Ausgang mit derselben Nummer.
+  Lage im Rack (Höheneinheit) vorerst nicht erfasst, Erweiterung offen lassen.
+  **Medium zuweisen:** Zu einer Verbindung. Angaben: Medientyp, Kabelnummer (eindeutig pro Standort),
+  Anzahl Anschlüsse pro Ende.
+  **Medium anschliessen:** Je Anschluss ein Port an einem Gerät der jeweiligen End-Position.
+  **Anschluss prüfen:** Port ist frei und Portart ist für den Medientyp erlaubt (Prüfung pro Anschluss).
+  **Entfernen:** Gerät bzw. Medium nur löschbar, wenn keine Anschlüsse mehr belegt sind.
+endlegend
+
+@enduml
