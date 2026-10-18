@@ -1,0 +1,26 @@
+# Reverse Proxy für die Netzwerkdokumentation
+#
+# SITE_ADDRESS        Adresse, unter der die Anwendung erreichbar ist (Standard: localhost)
+# LOGIN_USER          Gemeinsamer Benutzername (Phase 1)
+# LOGIN_PASSWORD_HASH bcrypt-Hash des Passworts (siehe docs/Entwicklung.md)
+
+{$SITE_ADDRESS:localhost} {
+	# Zertifikat aus der Caddy-eigenen CA, keine Anfrage ins Internet
+	tls internal
+
+	basic_auth {
+		{$LOGIN_USER} {$LOGIN_PASSWORD_HASH}
+	}
+
+	handle /api/* {
+		reverse_proxy backend:8080
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	encode gzip
+}

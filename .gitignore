@@ -1,0 +1,19 @@
+# Geheimnisse
+.env
+
+# .NET
+bin/
+obj/
+.vs/
+*.user
+
+# Node / Vite
+node_modules/
+dist/
+
+# Editor / System
+.vscode/*
+!.vscode/extensions.json
+.idea/
+Thumbs.db
+.DS_Store
