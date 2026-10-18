@@ -1,0 +1,83 @@
+// Zugriff auf das Backend. Fehler kommen als Problem Details (title = deutsche Meldung).
+
+export interface PlanKurz {
+  id: number
+  bezeichnung: string
+}
+
+export interface Standort {
+  id: number
+  name: string
+  masterplan: PlanKurz | null
+}
+
+export interface Plan {
+  id: number
+  standortId: number
+  bezeichnung: string
+  stockwerk: number
+  istMasterplan: boolean
+  methode: string
+  bildBreite: number
+  bildHoehe: number
+  bildUrl: string
+  pdfUrl: string
+}
+
+export interface Status {
+  backend: string
+  datenbank: string
+  version: string
+  zeit: string
+}
+
+export class ApiFehler extends Error {}
+
+async function anfrage<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers)
+  // Pflicht-Header für ändernde Aufrufe (Schutz gegen Cross-Site-Request-Forgery)
+  if (init.method && init.method !== 'GET') headers.set('X-NetzDoku', '1')
+
+  let antwort: Response
+  try {
+    antwort = await fetch(url, { ...init, headers })
+  } catch {
+    throw new ApiFehler('Der Server ist nicht erreichbar.')
+  }
+
+  if (!antwort.ok) {
+    let meldung = `Fehler ${antwort.status}`
+    try {
+      const problem = await antwort.json()
+      if (problem?.title) meldung = problem.title
+    } catch {
+      /* keine JSON-Antwort */
+    }
+    throw new ApiFehler(meldung)
+  }
+  return (await antwort.json()) as T
+}
+
+export const api = {
+  status: () => anfrage<Status>('/api/health'),
+
+  standorte: () => anfrage<Standort[]>('/api/standorte'),
+
+  standort: (id: number) => anfrage<Standort>(`/api/standorte/${id}`),
+
+  standortAnlegen: (name: string) =>
+    anfrage<Standort>('/api/standorte', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    }),
+
+  masterplanImportieren: (standortId: number, datei: File, bezeichnung: string) => {
+    const formular = new FormData()
+    formular.append('datei', datei)
+    if (bezeichnung.trim()) formular.append('bezeichnung', bezeichnung.trim())
+    return anfrage<Plan>(`/api/standorte/${standortId}/masterplan`, { method: 'POST', body: formular })
+  },
+
+  plan: (id: number) => anfrage<Plan>(`/api/plaene/${id}`)
+}

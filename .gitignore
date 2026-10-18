@@ -17,3 +17,6 @@ dist/
 .idea/
 Thumbs.db
 .DS_Store
+
+# Lokale Planablage (Entwicklung ohne Docker)
+backend/NetzDoku.Api/daten/

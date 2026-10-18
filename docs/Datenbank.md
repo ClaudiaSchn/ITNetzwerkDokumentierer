@@ -15,7 +15,7 @@ Das Schema setzt das Klassendiagramm [`diagramme/kd_01_datenmodell.puml`](diagra
 | Tabelle | Inhalt | Wichtige Spalten |
 | --- | --- | --- |
 | `standorte` | Firmenstandorte | `name` (eindeutig) |
-| `plaene` | Pläne (PDF) mit Referenzierung | `standort_id`, `ist_masterplan`, `methode`, `stockwerk`, `massstab`, `drehung`, `versatz_x/y`, `bezugsplan_id`, `ersetzt_plan_id`, `aktiv` |
+| `plaene` | Pläne (PDF) mit Referenzierung | `standort_id`, `ist_masterplan`, `methode`, `stockwerk`, `massstab`, `drehung`, `versatz_x/y`, `bezugsplan_id`, `ersetzt_plan_id`, `aktiv`, `pdf_datei`, `bild_datei`, `bild_breite`, `bild_hoehe` |
 | `passpunkte` | gespeicherte Passpunkte einer Referenzierung | `plan_id`, `nummer` (1/2), `plan_x/y`, `bezug_x/y` |
 | `positionen` | Rack, Bodendose … | `standort_id`, `positionstyp_id`, `bezeichnung`, `x`, `y`, `stockwerk` |
 | `verbindungen` | «Verbindung existiert» zwischen zwei Positionen | `standort_id`, `position_a_id`, `position_b_id` |
@@ -30,6 +30,8 @@ Das Schema setzt das Klassendiagramm [`diagramme/kd_01_datenmodell.puml`](diagra
 | `portvorlagen` | Ports einer Gerätevorlage | `geraetetyp_id`, `nummer`, `seite`, `portart_id` |
 
 Abweichung vom Klassendiagramm: `verbindungen` und `medien` tragen zusätzlich `standort_id`. Das ist nötig, damit die Datenbank die Eindeutigkeit der Kabelnummer pro Standort selbst prüfen kann, und vereinfacht Abfragen.
+
+Beim Import wird die PDF-Seite einmalig in ein PNG umgewandelt (`bild_datei`, längste Kante höchstens 6000 px, höchstens 200 dpi). Planeinheiten (u, v) sind Pixel dieses Bilds, Ursprung oben links, v nach unten. PDF und Bild liegen in der Planablage (Docker-Volume `plan-ablage`).
 
 Umrechnung Planpunkt (u, v) → absolute Koordinate (x, y) in Metern, θ = `drehung` in Grad:
 
