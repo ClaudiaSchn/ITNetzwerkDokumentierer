@@ -56,6 +56,8 @@ Die Nummern beziehen sich auf die Regeln im [Konzept](Konzept_Phase1.md#regeln).
 | – Jeder andere Plan hat einen Bezugsplan, Massstab > 0 | Datenbank | `ck_plaene_bezugsplan_noetig`, `ck_plaene_massstab_positiv` |
 | 2 Bezugsplan am selben Standort, keine Zyklen | Backend | Prüfung beim Referenzieren |
 | 4 Positionsbezeichnung eindeutig pro Standort | Datenbank | Index auf `positionen (standort_id, bezeichnung)` |
+| – Position nur auf kalibriertem Plan, innerhalb des Planbilds; Stockwerk −10…100 | Backend | Prüfung beim Erfassen und Verschieben (`PositionEndpunkte`) |
+| 10 Position löschen nur ohne Geräte und Verbindungen | Backend + Datenbank | Backend meldet die Anzahl (409), Fremdschlüssel sichern zusätzlich ab |
 | 4 Kabelnummer eindeutig pro Standort | Datenbank | Index auf `medien (standort_id, kabelnummer)` |
 | 5 Zwei verschiedene Positionen | Datenbank | `ck_verbindungen_zwei_positionen` |
 | 5 Höchstens eine Verbindung pro Paar (A–B = B–A) | Datenbank | Index `ux_verbindungen_positionspaar` |

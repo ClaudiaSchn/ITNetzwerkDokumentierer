@@ -57,6 +57,33 @@ export interface Plan {
   abweichungProzent: number | null
 }
 
+export interface Positionstyp {
+  id: number
+  name: string
+}
+
+/** Position, wie sie in einem Plan erscheint (u, v = Lage im Planbild, x, y = Meter) */
+export interface PositionImPlan {
+  id: number
+  version: number
+  bezeichnung: string
+  positionstypId: number
+  positionstyp: string
+  stockwerk: number
+  x: number
+  y: number
+  u: number
+  v: number
+  anzahlGeraete: number
+  anzahlVerbindungen: number
+}
+
+export interface PositionDaten {
+  bezeichnung: string
+  positionstypId: number
+  stockwerk: number
+}
+
 export interface Status {
   backend: string
   datenbank: string
@@ -88,6 +115,7 @@ async function anfrage<T>(url: string, init: RequestInit = {}): Promise<T> {
     }
     throw new ApiFehler(meldung)
   }
+  if (antwort.status === 204) return undefined as T
   return (await antwort.json()) as T
 }
 
@@ -119,5 +147,34 @@ export const api = {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ version, nullpunkt, strecken })
-    })
+    }),
+
+  positionstypen: () => anfrage<Positionstyp[]>('/api/positionstypen'),
+
+  positionstypAnlegen: (name: string) =>
+    anfrage<Positionstyp>('/api/positionstypen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    }),
+
+  positionenImPlan: (planId: number) => anfrage<PositionImPlan[]>(`/api/plaene/${planId}/positionen`),
+
+  positionErfassen: (standortId: number, planId: number, punkt: Punkt, daten: PositionDaten) =>
+    anfrage<PositionImPlan>(`/api/standorte/${standortId}/positionen`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planId, u: punkt.u, v: punkt.v, ...daten })
+    }),
+
+  /** Ändert eine Position; mit `punkt` wird sie zusätzlich verschoben. */
+  positionAendern: (id: number, version: number, planId: number, daten: PositionDaten, punkt?: Punkt) =>
+    anfrage<PositionImPlan>(`/api/positionen/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version, planId, ...daten, u: punkt?.u ?? null, v: punkt?.v ?? null })
+    }),
+
+  positionLoeschen: (id: number, version: number) =>
+    anfrage<void>(`/api/positionen/${id}?version=${version}`, { method: 'DELETE' })
 }
