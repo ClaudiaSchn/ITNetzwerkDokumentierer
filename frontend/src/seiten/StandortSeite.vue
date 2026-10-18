@@ -1,15 +1,24 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { api, type Plan, type PositionImPlan, type Positionstyp, type Punkt, type Standort } from '../api'
-import { formatMassstab, formatZahl } from '../geometrie'
-import { naechsteBezeichnung } from '../format'
+import { useRoute, useRouter } from 'vue-router'
+import { api, type Plan, type PlanListe, type PositionImPlan, type Positionstyp, type Punkt, type Standort } from '../api'
+import { formatDrehung, formatMassstab, formatZahl } from '../geometrie'
+import { naechsteBezeichnung, stockwerkText } from '../format'
 import PlanAnsicht, { type Linie, type Markierung } from '../komponenten/PlanAnsicht.vue'
 import MasterKalibrierung from '../komponenten/MasterKalibrierung.vue'
 import PositionenPanel from '../komponenten/PositionenPanel.vue'
+import PlanReferenzierung, { type ReferenzAnzeige, type Seite } from '../komponenten/PlanReferenzierung.vue'
+import PlanImport from '../komponenten/PlanImport.vue'
+import PlanEinstellungen from '../komponenten/PlanEinstellungen.vue'
 
 const props = defineProps<{ id: number }>()
+const route = useRoute()
+const router = useRouter()
 
 const standort = ref<Standort | null>(null)
+/** Alle aktiven Pläne des Standorts */
+const plaene = ref<PlanListe[]>([])
+/** Angezeigter Plan (Auswahl über ?plan=…, sonst der Masterplan) */
 const plan = ref<Plan | null>(null)
 const laedt = ref(true)
 const ladeFehler = ref<string | null>(null)
@@ -19,8 +28,12 @@ const bezeichnung = ref('')
 const laedtHoch = ref(false)
 const uploadFehler = ref<string | null>(null)
 
-/** ansehen = Liste/Auswahl, setzen = Klick erzeugt neue Position, kalibrieren = Kalibrier-Werkzeug */
-type Modus = 'ansehen' | 'setzen' | 'kalibrieren'
+/**
+ * ansehen = Positionsliste/Auswahl, setzen = Klick erzeugt neue Position,
+ * kalibrieren = Masterplan kalibrieren, referenzieren = Plan über Passpunkte ausrichten,
+ * importieren / einstellungen = entsprechende Seitenleiste
+ */
+type Modus = 'ansehen' | 'setzen' | 'kalibrieren' | 'referenzieren' | 'importieren' | 'einstellungen'
 const modus = ref<Modus>('ansehen')
 const meldung = ref<string | null>(null)
 const ansicht = ref<InstanceType<typeof PlanAnsicht> | null>(null)
@@ -31,7 +44,14 @@ const werkzeugMarkierungen = ref<Markierung[]>([])
 const werkzeugLinien = ref<Linie[]>([])
 const kalibrierKlick = ref(false)
 
+// Referenzierung (zwei Planansichten nebeneinander)
+const referenz = ref<InstanceType<typeof PlanReferenzierung> | null>(null)
+const refAnzeige = ref<ReferenzAnzeige | null>(null)
+const kontrolleLinks = ref<Punkt | null>(null)
+const kontrolleRechts = ref<Punkt | null>(null)
+
 // Positionen
+const alleStockwerke = ref(false)
 const positionen = ref<PositionImPlan[]>([])
 const typen = ref<Positionstyp[]>([])
 const auswahlId = ref<number | null>(null)
@@ -53,14 +73,13 @@ async function laden() {
   laedt.value = true
   ladeFehler.value = null
   plan.value = null
-  positionen.value = []
-  auswahlId.value = null
-  entwurf.value = null
+  plaene.value = []
   try {
     standort.value = await api.standort(props.id)
-    if (standort.value.masterplan) plan.value = await api.plan(standort.value.masterplan.id)
-    modus.value = plan.value && !plan.value.referenziert ? 'kalibrieren' : 'ansehen'
-    if (plan.value?.referenziert) await positionenLaden()
+    if (standort.value.masterplan) {
+      plaene.value = await api.plaene(props.id)
+      await planLaden()
+    }
   } catch (e) {
     ladeFehler.value = (e as Error).message
   } finally {
@@ -68,9 +87,39 @@ async function laden() {
   }
 }
 
+/** Den in der Adresse gewählten Plan laden (unbekannt oder leer → Masterplan) */
+async function planLaden() {
+  const masterId = standort.value?.masterplan?.id
+  if (!masterId) return
+  const gewuenscht = Number(route.query.plan)
+  const id = plaene.value.some((p) => p.id === gewuenscht) ? gewuenscht : masterId
+  try {
+    const neu = await api.plan(id)
+    plan.value = neu
+    positionen.value = []
+    schliessen()
+    kontrolleLinks.value = kontrolleRechts.value = null
+    refAnzeige.value = null
+    alleStockwerke.value = false
+    vorschlag.value = { ...vorschlag.value, bezeichnung: '', stockwerk: neu.stockwerk }
+    modus.value = neu.referenziert ? 'ansehen' : neu.istMasterplan ? 'kalibrieren' : 'referenzieren'
+    await positionenLaden()
+  } catch (e) {
+    ladeFehler.value = (e as Error).message
+  }
+}
+
+function planWechseln(id: number) {
+  router.push({ query: { ...route.query, plan: String(id) } })
+}
+
+async function planlisteLaden() {
+  plaene.value = await api.plaene(props.id)
+}
+
 async function positionenLaden() {
   if (!plan.value?.referenziert) return
-  const [liste, t] = await Promise.all([api.positionenImPlan(plan.value.id), api.positionstypen()])
+  const [liste, t] = await Promise.all([api.positionenImPlan(plan.value.id, alleStockwerke.value), api.positionstypen()])
   positionen.value = liste
   typen.value = t
 }
@@ -97,6 +146,7 @@ async function hochladen() {
     plan.value = await api.masterplanImportieren(props.id, datei.value, bezeichnung.value)
     if (standort.value)
       standort.value.masterplan = { id: plan.value.id, bezeichnung: plan.value.bezeichnung, referenziert: false }
+    await planlisteLaden()
     modus.value = 'kalibrieren'
   } catch (e) {
     uploadFehler.value = (e as Error).message
@@ -118,12 +168,69 @@ async function kalibrierungGespeichert(neu: Plan) {
   modus.value = 'ansehen'
   kalibrierKlick.value = false
   melden(`Masterplan kalibriert: ${formatMassstab(neu.massstab)}`)
-  await positionenLaden() // Lage im Plan hat sich ggf. geändert
+  await Promise.all([planlisteLaden(), positionenLaden()]) // Lage im Plan hat sich ggf. geändert
 }
 
-function kalibrierenStarten() {
+/** Kalibrierung (Masterplan) bzw. Referenzierung neu machen */
+function lageAendern() {
   schliessen()
-  modus.value = 'kalibrieren'
+  modus.value = plan.value?.istMasterplan ? 'kalibrieren' : 'referenzieren'
+}
+
+// --- Referenzierung ---
+
+async function referenzGespeichert(neu: Plan) {
+  plan.value = neu
+  modus.value = 'ansehen'
+  refAnzeige.value = null
+  kontrolleLinks.value = kontrolleRechts.value = null
+  melden(`Plan «${neu.bezeichnung}» referenziert: ${formatMassstab(neu.massstab)} · Drehung ${formatDrehung(neu.drehung)}`)
+  await Promise.all([planlisteLaden(), positionenLaden()])
+}
+
+function referenzAbbrechen() {
+  refAnzeige.value = null
+  kontrolleLinks.value = kontrolleRechts.value = null
+  if (plan.value?.referenziert) modus.value = 'ansehen'
+  else if (standort.value?.masterplan) {
+    melden(`«${plan.value?.bezeichnung}» ist noch nicht referenziert. Sie finden den Plan in der Planauswahl.`)
+    planWechseln(standort.value.masterplan.id)
+  }
+}
+
+function kontrolle(links: Punkt | null, rechts: Punkt | null) {
+  kontrolleLinks.value = links
+  kontrolleRechts.value = rechts
+}
+
+// --- Plan importieren / Einstellungen ---
+
+function seitenleiste(ziel: 'importieren' | 'einstellungen') {
+  schliessen()
+  modus.value = modus.value === ziel ? 'ansehen' : ziel
+}
+
+async function planImportiert(neu: Plan) {
+  await planlisteLaden()
+  melden(`Plan «${neu.bezeichnung}» importiert. Jetzt zwei Passpunkte setzen.`)
+  planWechseln(neu.id)
+}
+
+async function planGeaendert(neu: Plan) {
+  const stockwerkGeaendert = neu.stockwerk !== plan.value?.stockwerk
+  plan.value = neu
+  modus.value = 'ansehen'
+  vorschlag.value = { ...vorschlag.value, stockwerk: neu.stockwerk }
+  melden(`Plan «${neu.bezeichnung}» gespeichert.`)
+  await planlisteLaden()
+  if (stockwerkGeaendert) await positionenLaden()
+}
+
+async function planGeloescht() {
+  const name = plan.value?.bezeichnung
+  await planlisteLaden()
+  melden(`Plan «${name}» gelöscht.`)
+  if (standort.value?.masterplan) planWechseln(standort.value.masterplan.id)
 }
 
 // --- Positionen ---
@@ -187,6 +294,7 @@ function auswaehlen(id: number) {
 
 function klick(p: Punkt) {
   if (modus.value === 'kalibrieren') kalibrierung.value?.klick(p)
+  else if (modus.value === 'referenzieren') referenz.value?.klick('links', p)
   else if (modus.value === 'setzen') {
     auswahlId.value = null
     entwurf.value = p
@@ -195,17 +303,23 @@ function klick(p: Punkt) {
 
 function verschoben(id: string, p: Punkt) {
   if (modus.value === 'kalibrieren') kalibrierung.value?.verschoben(id, p)
+  else if (modus.value === 'referenzieren') referenz.value?.verschoben('links', id, p)
   else if (id === 'entwurf') entwurf.value = p
   else if (id === `pos-${auswahlId.value}`) verschobenNach.value = p
 }
 
+function zeiger(seite: Seite, p: Punkt | null) {
+  if (modus.value === 'referenzieren') referenz.value?.zeiger(seite, p)
+}
+
 function markierungKlick(id: string) {
-  if (modus.value === 'kalibrieren' || !id.startsWith('pos-')) return
+  if (!id.startsWith('pos-')) return
   auswaehlen(Number(id.slice(4)))
 }
 
 const markierungen = computed<Markierung[]>(() => {
   if (modus.value === 'kalibrieren') return werkzeugMarkierungen.value
+  if (modus.value === 'referenzieren') return refAnzeige.value?.links ?? []
   const liste: Markierung[] = positionen.value.map((p) => {
     const aktiv = p.id === auswahlId.value
     return {
@@ -223,18 +337,47 @@ const markierungen = computed<Markierung[]>(() => {
   return liste
 })
 const linien = computed(() => (modus.value === 'kalibrieren' ? werkzeugLinien.value : []))
-const klickModus = computed(() => (modus.value === 'kalibrieren' ? kalibrierKlick.value : modus.value === 'setzen'))
+const klickModus = computed(() => {
+  if (modus.value === 'kalibrieren') return kalibrierKlick.value
+  if (modus.value === 'referenzieren') return refAnzeige.value?.klick ?? false
+  return modus.value === 'setzen'
+})
+const werkzeugAktiv = computed(() => modus.value === 'kalibrieren' || modus.value === 'referenzieren')
+
+/** Planauswahl als Baum: jeder Plan unter seinem Bezugsplan eingerückt */
+const planOptionen = computed(() => {
+  const ergebnis: { id: number; text: string }[] = []
+  const gesehen = new Set<number>()
+  const hinzufuegen = (p: PlanListe, tiefe: number) => {
+    if (gesehen.has(p.id)) return
+    gesehen.add(p.id)
+    const einzug = tiefe > 0 ? '\u00a0\u00a0\u00a0'.repeat(tiefe - 1) + '↳ ' : ''
+    const zusatz = p.istMasterplan ? ' (Masterplan)' : ` · ${stockwerkText(p.stockwerk)}`
+    ergebnis.push({ id: p.id, text: `${einzug}${p.bezeichnung}${zusatz}${p.referenziert ? '' : ' – nicht referenziert'}` })
+    plaene.value.filter((k) => k.bezugsplanId === p.id).forEach((k) => hinzufuegen(k, tiefe + 1))
+  }
+  plaene.value.filter((p) => p.istMasterplan).forEach((p) => hinzufuegen(p, 0))
+  plaene.value.forEach((p) => hinzufuegen(p, 1)) // Rest (sollte nicht vorkommen)
+  return ergebnis
+})
+
+const bezugsplanName = computed(() => plaene.value.find((p) => p.id === plan.value?.bezugsplanId)?.bezeichnung ?? '')
 
 // Esc: Entwurf/Auswahl schliessen, dann Setzen-Modus beenden
 function taste(e: KeyboardEvent) {
-  if (e.key !== 'Escape' || modus.value === 'kalibrieren') return
-  if (entwurf.value || auswahlId.value !== null) schliessen()
+  if (e.key !== 'Escape' || werkzeugAktiv.value) return
+  if (modus.value === 'importieren' || modus.value === 'einstellungen') modus.value = 'ansehen'
+  else if (entwurf.value || auswahlId.value !== null) schliessen()
   else if (modus.value === 'setzen') modus.value = 'ansehen'
 }
 onMounted(() => window.addEventListener('keydown', taste))
 onBeforeUnmount(() => window.removeEventListener('keydown', taste))
 
 watch(() => props.id, laden, { immediate: true })
+watch(() => route.query.plan, () => {
+  if (!laedt.value && standort.value?.masterplan) planLaden()
+})
+watch(alleStockwerke, positionenLaden)
 </script>
 
 <template>
@@ -249,20 +392,35 @@ watch(() => props.id, laden, { immediate: true })
     <div class="leiste">
       <RouterLink to="/" class="zurueck">← Standorte</RouterLink>
       <strong>{{ standort.name }}</strong>
-      <span class="leise">Masterplan: {{ plan.bezeichnung }}</span>
-      <span v-if="plan.referenziert" class="kalibriert" :title="plan.abweichungProzent !== null
+      <select class="planwahl" :value="plan.id" aria-label="Plan auswählen"
+        @change="planWechseln(Number(($event.target as HTMLSelectElement).value))">
+        <option v-for="o in planOptionen" :key="o.id" :value="o.id">{{ o.text }}</option>
+      </select>
+      <span v-if="plan.referenziert && plan.istMasterplan" class="kalibriert" :title="plan.abweichungProzent !== null
         ? `Abweichung zwischen den Strecken: ${formatZahl(plan.abweichungProzent, 1)} %` : ''">
         ✓ kalibriert · {{ formatMassstab(plan.massstab) }}
       </span>
-      <span v-else class="offen">nicht kalibriert</span>
+      <span v-else-if="plan.referenziert" class="kalibriert"
+        :title="`Referenziert auf «${bezugsplanName}» · Drehung ${formatDrehung(plan.drehung)}`">
+        ✓ referenziert · {{ formatMassstab(plan.massstab) }}
+      </span>
+      <span v-else class="offen">{{ plan.istMasterplan ? 'nicht kalibriert' : 'nicht referenziert' }}</span>
+      <label v-if="plan.referenziert && !plan.istMasterplan && !werkzeugAktiv" class="schalter"
+        title="Auch Positionen anderer Stockwerke anzeigen">
+        <input v-model="alleStockwerke" type="checkbox" /> alle Stockwerke
+      </label>
       <span class="rechts">
-        <button v-if="plan.referenziert && modus !== 'kalibrieren'" type="button" class="klein-btn"
-          :class="modus === 'setzen' ? 'aktiv-btn' : 'zweitrangig'" :aria-pressed="modus === 'setzen'"
-          title="Klick in den Plan setzt eine neue Position (Esc beendet)" @click="setzenUmschalten">
-          {{ modus === 'setzen' ? '✓ Position setzen' : '＋ Position setzen' }}
-        </button>
-        <button v-if="plan.referenziert && modus !== 'kalibrieren'" type="button" class="zweitrangig klein-btn"
-          @click="kalibrierenStarten">Kalibrierung ändern</button>
+        <template v-if="!werkzeugAktiv">
+          <button v-if="plan.referenziert" type="button" class="klein-btn"
+            :class="modus === 'setzen' ? 'aktiv-btn' : 'zweitrangig'" :aria-pressed="modus === 'setzen'"
+            title="Klick in den Plan setzt eine neue Position (Esc beendet)" @click="setzenUmschalten">
+            {{ modus === 'setzen' ? '✓ Position setzen' : '＋ Position setzen' }}
+          </button>
+          <button type="button" class="zweitrangig klein-btn" :class="{ gedrueckt: modus === 'einstellungen' }"
+            @click="seitenleiste('einstellungen')">Plan-Einstellungen</button>
+          <button v-if="standort.masterplan?.referenziert || plan.referenziert" type="button" class="zweitrangig klein-btn"
+            :class="{ gedrueckt: modus === 'importieren' }" @click="seitenleiste('importieren')">＋ Plan importieren</button>
+        </template>
         <a :href="plan.pdfUrl">Original-PDF</a>
       </span>
     </div>
@@ -272,9 +430,27 @@ watch(() => props.id, laden, { immediate: true })
     </p>
     <div class="arbeitsflaeche">
       <PlanAnsicht ref="ansicht" :plan="plan" :markierungen="markierungen" :linien="linien" :klick-modus="klickModus"
-        class="ansicht" @klick="klick" @verschoben="verschoben" @markierung-klick="markierungKlick" />
-      <MasterKalibrierung v-if="modus === 'kalibrieren'" ref="kalibrierung" :plan="plan" @anzeige="werkzeugAnzeige"
+        :kontrollpunkt="modus === 'referenzieren' ? kontrolleLinks : null"
+        :titel="modus === 'referenzieren' ? `Dieser Plan: ${plan.bezeichnung}` : ''" class="ansicht"
+        @klick="klick" @verschoben="verschoben" @markierung-klick="markierungKlick" @zeiger="(p: Punkt | null) => zeiger('links', p)" />
+      <template v-if="modus === 'referenzieren'">
+        <PlanAnsicht v-if="refAnzeige?.bezug" :key="refAnzeige.bezug.id" :plan="refAnzeige.bezug"
+          :markierungen="refAnzeige.rechts" :linien="refAnzeige.linienRechts" :klick-modus="refAnzeige.klick"
+          :kontrollpunkt="kontrolleRechts" :titel="`Bezugsplan: ${refAnzeige.bezug.bezeichnung}`" class="ansicht bezug"
+          @klick="(p: Punkt) => referenz?.klick('rechts', p)"
+          @verschoben="(id: string, p: Punkt) => referenz?.verschoben('rechts', id, p)"
+          @zeiger="(p: Punkt | null) => zeiger('rechts', p)" />
+        <div v-else class="ansicht bezug platzhalter leise">Bezugsplan wird geladen …</div>
+        <PlanReferenzierung ref="referenz" :key="plan.id" :plan="plan" :plaene="plaene"
+          @anzeige="(a: ReferenzAnzeige) => (refAnzeige = a)" @kontrolle="kontrolle"
+          @gespeichert="referenzGespeichert" @abbrechen="referenzAbbrechen" />
+      </template>
+      <MasterKalibrierung v-else-if="modus === 'kalibrieren'" ref="kalibrierung" :plan="plan" @anzeige="werkzeugAnzeige"
         @gespeichert="kalibrierungGespeichert" @abbrechen="modus = 'ansehen'" />
+      <PlanImport v-else-if="modus === 'importieren'" :standort-id="standort.id" :plaene="plaene"
+        :vorschlag-bezug="plan.referenziert ? plan.id : null" @importiert="planImportiert" @abbrechen="modus = 'ansehen'" />
+      <PlanEinstellungen v-else-if="modus === 'einstellungen'" :plan="plan" :plaene="plaene"
+        @gespeichert="planGeaendert" @geloescht="planGeloescht" @abbrechen="modus = 'ansehen'" @lage-aendern="lageAendern" />
       <PositionenPanel v-else-if="plan.referenziert" :plan="plan" :standort-id="standort.id" :positionen="positionen"
         :typen="typen" :entwurf="entwurf" :auswahl="auswahl" :verschoben-nach="verschobenNach" :vorschlag="vorschlag"
         @gespeichert="positionGespeichert" @geloescht="positionGeloescht" @abbrechen="schliessen"
@@ -347,6 +523,35 @@ watch(() => props.id, laden, { immediate: true })
 .klein-btn {
   padding: 0.2rem 0.7rem;
   font-size: 0.85rem;
+}
+.planwahl {
+  font: inherit;
+  font-size: 0.95rem;
+  max-width: 22rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+  background: var(--flaeche);
+}
+.schalter {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+.gedrueckt {
+  background: var(--hintergrund);
+  border-color: var(--text-leise);
+}
+.bezug {
+  border-left: 3px solid #54aeff;
+}
+.platzhalter {
+  display: grid;
+  place-items: center;
+  background: #e9ecef;
 }
 .aktiv-btn {
   background: #fb8500;

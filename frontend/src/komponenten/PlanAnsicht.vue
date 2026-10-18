@@ -34,14 +34,20 @@ const props = withDefaults(
     linien?: Linie[]
     /** Fadenkreuz-Cursor und Klick-Ereignisse aktiv */
     klickModus?: boolean
+    /** Entsprechender Punkt zum Mauszeiger in einem anderen Plan (Kontrolle beim Referenzieren) */
+    kontrollpunkt?: Punkt | null
+    /** Überschrift oben in der Ansicht (z.B. «Bezugsplan: …») */
+    titel?: string
   }>(),
-  { markierungen: () => [], linien: () => [], klickModus: false }
+  { markierungen: () => [], linien: () => [], klickModus: false, kontrollpunkt: null, titel: '' }
 )
 
 const emit = defineEmits<{
   klick: [punkt: Punkt]
   verschoben: [id: string, punkt: Punkt]
   markierungKlick: [id: string]
+  /** Mauszeiger über dem Planbild (null = ausserhalb) */
+  zeiger: [punkt: Punkt | null]
 }>()
 
 const container = ref<HTMLDivElement | null>(null)
@@ -51,6 +57,8 @@ let bild: L.ImageOverlay | null = null
 // Leaflet merkt Grössenänderungen des Containers nicht selbst (z.B. Seitenleiste ein/aus)
 let groessenBeobachter: ResizeObserver | null = null
 const ebene = L.layerGroup()
+// Eigener Marker, damit das Nachführen nicht alle anderen Markierungen neu zeichnet
+let kontrollMarker: L.Marker | null = null
 
 // Planeinheiten (u, v): Pixel des Planbilds, Ursprung oben links, v nach unten.
 // Leaflet (CRS.Simple) zählt y nach oben, deshalb: LatLng(-v, u).
@@ -64,8 +72,32 @@ function planZeigen() {
   const grenzen = L.latLngBounds(nachLatLng({ u: 0, v: h }), nachLatLng({ u: b, v: 0 }))
   bild = L.imageOverlay(props.plan.bildUrl, grenzen).addTo(karte)
   karte.setMaxBounds(grenzen.pad(0.25))
-  karte.fitBounds(grenzen)
-  karte.setMinZoom(karte.getZoom() - 1)
+  einpassen()
+}
+
+// True, solange der ganze Plan eingepasst ist und der Benutzer nicht gezoomt/verschoben hat
+let eingepasst = false
+let einpassenLaeuft = false
+
+/** Ganzen Plan zeigen; herauszoomen ist bis eine Stufe weiter erlaubt */
+function einpassen() {
+  if (!bild || !karte) return
+  const grenzen = bild.getBounds()
+  einpassenLaeuft = true
+  karte.setMinZoom(karte.getBoundsZoom(grenzen) - 1)
+  karte.fitBounds(grenzen, { animate: false })
+  einpassenLaeuft = false
+  eingepasst = true
+}
+
+/**
+ * Grösse der Fläche hat sich geändert (Seitenleiste, zweite Planansicht). Ist der ganze Plan
+ * eingepasst, wird er neu eingepasst – sonst bleibt der gewählte Ausschnitt.
+ */
+function groesseGeaendert() {
+  if (!karte || !bild) return
+  karte.invalidateSize({ pan: false })
+  if (eingepasst) einpassen()
 }
 
 // Texte werden als HTML eingefügt → immer maskieren (später stehen hier Benutzereingaben)
@@ -131,12 +163,19 @@ onMounted(() => {
     attributionControl: false
   })
   ebene.addTo(karte)
+  karte.on('zoomstart dragstart', () => {
+    if (!einpassenLaeuft) eingepasst = false
+  })
   karte.on('mousemove', (e: L.LeafletMouseEvent) => {
     const p = nachPunkt(e.latlng)
     const { bildBreite: b, bildHoehe: h } = props.plan
     zeiger.value = p.u >= 0 && p.v >= 0 && p.u <= b && p.v <= h ? p : null
+    emit('zeiger', zeiger.value)
   })
-  karte.on('mouseout', () => (zeiger.value = null))
+  karte.on('mouseout', () => {
+    zeiger.value = null
+    emit('zeiger', null)
+  })
   karte.on('click', (e: L.LeafletMouseEvent) => {
     if (!props.klickModus) return
     const p = nachPunkt(e.latlng)
@@ -145,11 +184,31 @@ onMounted(() => {
   })
   planZeigen()
   ebeneZeichnen()
-  groessenBeobachter = new ResizeObserver(() => karte?.invalidateSize({ pan: false }))
+  kontrolleZeigen()
+  groessenBeobachter = new ResizeObserver(groesseGeaendert)
   groessenBeobachter.observe(container.value)
 })
 
+function kontrolleZeigen() {
+  if (!karte) return
+  const p = props.kontrollpunkt
+  if (!p) {
+    kontrollMarker?.remove()
+    kontrollMarker = null
+    return
+  }
+  if (!kontrollMarker) {
+    kontrollMarker = L.marker(nachLatLng(p), {
+      icon: L.divIcon({ className: 'markierung markierung-kontrolle', html: '<span class="ring"></span>', iconSize: [22, 22], iconAnchor: [11, 11] }),
+      interactive: false,
+      keyboard: false,
+      zIndexOffset: 2000
+    }).addTo(karte)
+  } else kontrollMarker.setLatLng(nachLatLng(p))
+}
+
 watch(() => props.plan.id, planZeigen)
+watch(() => props.kontrollpunkt, kontrolleZeigen)
 watch(() => [props.markierungen, props.linien], ebeneZeichnen, { deep: true })
 
 onBeforeUnmount(() => {
@@ -157,10 +216,6 @@ onBeforeUnmount(() => {
   karte?.remove()
   karte = null
 })
-
-function einpassen() {
-  if (bild && karte) karte.fitBounds(bild.getBounds())
-}
 
 function welt(p: Punkt) {
   return nachAbsolut(props.plan, p)
@@ -178,6 +233,7 @@ defineExpose({ zentrieren })
 <template>
   <div class="rahmen" :class="{ 'klick-modus': klickModus }">
     <div ref="container" class="karte-flaeche"></div>
+    <div v-if="titel" class="titel">{{ titel }}</div>
     <button type="button" class="zweitrangig einpassen" title="Ganzen Plan anzeigen" @click="einpassen">
       Ganzer Plan
     </button>
@@ -205,6 +261,23 @@ defineExpose({ zentrieren })
 }
 .klick-modus .karte-flaeche {
   cursor: crosshair;
+}
+.titel {
+  position: absolute;
+  top: 0.75rem;
+  left: 3.5rem;
+  z-index: 1000;
+  pointer-events: none;
+  max-width: calc(100% - 12rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(31, 35, 40, 0.85);
+  color: #fff;
+  border-radius: 6px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 .einpassen {
   position: absolute;
@@ -264,6 +337,25 @@ defineExpose({ zentrieren })
 }
 .markierung-messpunkt {
   color: #0969da;
+}
+.markierung-kontrolle .ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid #fb8500;
+  background: rgba(251, 133, 0, 0.18);
+  box-shadow: 0 0 0 2px #fff;
+}
+.markierung-kontrolle .ring::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: #fb8500;
 }
 .markierung-position .punkt {
   position: absolute;

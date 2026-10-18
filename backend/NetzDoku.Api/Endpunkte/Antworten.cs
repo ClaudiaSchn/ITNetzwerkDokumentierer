@@ -13,6 +13,12 @@ public record PlanKurzDto(int Id, string Bezeichnung, bool Referenziert);
 
 public record PunktDto(double U, double V);
 
+public record PasspunktDto(int Nummer, double PlanU, double PlanV, double BezugU, double BezugV);
+
+/// <summary>Plan in der Planliste eines Standorts.</summary>
+public record PlanListeDto(
+    int Id, string Bezeichnung, int Stockwerk, bool IstMasterplan, string Methode, bool Referenziert, int? BezugsplanId);
+
 public record MessstreckeDto(int Nummer, double U1, double V1, double U2, double V2, double LaengeMeter, double Massstab);
 
 public record PlanDto(
@@ -34,9 +40,11 @@ public record PlanDto(
     double VersatzY,
     PunktDto? Nullpunkt,
     IReadOnlyList<MessstreckeDto> Messstrecken,
-    double? AbweichungProzent)
+    double? AbweichungProzent,
+    int? BezugsplanId,
+    IReadOnlyList<PasspunktDto> Passpunkte)
 {
-    /// <summary>Erwartet einen Plan mit geladenen <see cref="Plan.Messstrecken"/>.</summary>
+    /// <summary>Erwartet einen Plan mit geladenen <see cref="Plan.Messstrecken"/> und <see cref="Plan.Passpunkte"/>.</summary>
     public static PlanDto Aus(Plan p)
     {
         var strecken = p.Messstrecken.OrderBy(m => m.Nummer).Select(m =>
@@ -60,7 +68,10 @@ public record PlanDto(
         return new PlanDto(
             p.Id, p.Version, p.StandortId, p.Bezeichnung, p.Stockwerk, p.IstMasterplan, p.Methode.ToString(),
             p.BildBreite, p.BildHoehe, $"/api/plaene/{p.Id}/bild", $"/api/plaene/{p.Id}/pdf",
-            p.Referenziert, p.Massstab, p.Drehung, p.VersatzX, p.VersatzY, nullpunkt, strecken, abweichung);
+            p.Referenziert, p.Massstab, p.Drehung, p.VersatzX, p.VersatzY, nullpunkt, strecken, abweichung,
+            p.BezugsplanId,
+            p.Passpunkte.OrderBy(x => x.Nummer)
+                .Select(x => new PasspunktDto(x.Nummer, x.PlanX, x.PlanY, x.BezugX, x.BezugY)).ToList());
     }
 }
 
@@ -70,6 +81,15 @@ public record StreckeEingabe(double U1, double V1, double U2, double V2, double 
 
 /// <summary>Kalibrierung des Masterplans. <see cref="Version"/> = Version des Plans beim Laden.</summary>
 public record MasterKalibrierungEingabe(uint Version, PunktDto? Nullpunkt, List<StreckeEingabe>? Strecken);
+
+/// <summary>Ein Passpunkt: Lage im neuen Plan und im Bezugsplan (je Planeinheiten).</summary>
+public record PasspunktEingabe(double PlanU, double PlanV, double BezugU, double BezugV);
+
+/// <summary>Referenzierung über zwei Passpunkte. <see cref="Version"/> = Version des Plans beim Laden.</summary>
+public record ReferenzierungEingabe(uint Version, int BezugsplanId, List<PasspunktEingabe>? Passpunkte);
+
+/// <summary>Bezeichnung und Stockwerk eines Plans ändern.</summary>
+public record PlanAendern(uint Version, string? Bezeichnung, int Stockwerk);
 
 /// <summary>Einheitliche Fehlerantworten (RFC 9457 Problem Details) mit deutschem Text.</summary>
 public static class Fehler

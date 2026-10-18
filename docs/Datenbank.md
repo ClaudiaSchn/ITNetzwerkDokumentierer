@@ -54,7 +54,10 @@ Die Nummern beziehen sich auf die Regeln im [Konzept](Konzept_Phase1.md#regeln).
 | 1 Ein aktiver Masterplan pro Standort | Datenbank | Index `ux_plaene_ein_masterplan_pro_standort` |
 | 1 Masterplan: Stockwerk 0, kein Bezugsplan, Methode Master | Datenbank | `ck_plaene_masterplan`, `ck_plaene_methode_passt` |
 | – Jeder andere Plan hat einen Bezugsplan, Massstab > 0 | Datenbank | `ck_plaene_bezugsplan_noetig`, `ck_plaene_massstab_positiv` |
-| 2 Bezugsplan am selben Standort, keine Zyklen | Backend | Prüfung beim Referenzieren |
+| 2 Bezugsplan am selben Standort, keine Zyklen | Backend | Prüfung beim Importieren und Referenzieren |
+| – Bezugsplan muss selbst referenziert sein; Passpunkte ≥ 20 px auseinander | Backend | Prüfung beim Referenzieren |
+| – Lage eines Plans geändert → abhängige Pläne werden neu berechnet | Backend | `Referenzierung.NachfolgerNeuBerechnen` über die gespeicherten Passpunkte, in derselben Transaktion |
+| – Plan löschen nur, wenn kein anderer Plan darauf referenziert ist; Masterplan nie | Backend + Datenbank | Backend meldet die Pläne (409), Fremdschlüssel `ON DELETE RESTRICT` |
 | 4 Positionsbezeichnung eindeutig pro Standort | Datenbank | Index auf `positionen (standort_id, bezeichnung)` |
 | – Position nur auf kalibriertem Plan, innerhalb des Planbilds; Stockwerk −10…100 | Backend | Prüfung beim Erfassen und Verschieben (`PositionEndpunkte`) |
 | 10 Position löschen nur ohne Geräte und Verbindungen | Backend + Datenbank | Backend meldet die Anzahl (409), Fremdschlüssel sichern zusätzlich ab |

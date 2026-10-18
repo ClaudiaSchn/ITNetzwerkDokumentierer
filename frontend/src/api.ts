@@ -29,6 +29,33 @@ export interface StreckeEingabe {
   laengeMeter: number
 }
 
+export interface Passpunkt {
+  nummer: number
+  planU: number
+  planV: number
+  bezugU: number
+  bezugV: number
+}
+
+/** Paar aus Punkt im Plan und demselben Punkt im Bezugsplan */
+export interface PasspunktEingabe {
+  planU: number
+  planV: number
+  bezugU: number
+  bezugV: number
+}
+
+/** Eintrag in der Planliste eines Standorts */
+export interface PlanListe {
+  id: number
+  bezeichnung: string
+  stockwerk: number
+  istMasterplan: boolean
+  methode: string
+  referenziert: boolean
+  bezugsplanId: number | null
+}
+
 export interface Standort {
   id: number
   name: string
@@ -55,6 +82,8 @@ export interface Plan {
   nullpunkt: Punkt | null
   messstrecken: Messstrecke[]
   abweichungProzent: number | null
+  bezugsplanId: number | null
+  passpunkte: Passpunkt[]
 }
 
 export interface Positionstyp {
@@ -142,6 +171,34 @@ export const api = {
 
   plan: (id: number) => anfrage<Plan>(`/api/plaene/${id}`),
 
+  plaene: (standortId: number) => anfrage<PlanListe[]>(`/api/standorte/${standortId}/plaene`),
+
+  planImportieren: (standortId: number, datei: File, bezeichnung: string, stockwerk: number, bezugsplanId: number) => {
+    const formular = new FormData()
+    formular.append('datei', datei)
+    if (bezeichnung.trim()) formular.append('bezeichnung', bezeichnung.trim())
+    formular.append('stockwerk', String(stockwerk))
+    formular.append('bezugsplanId', String(bezugsplanId))
+    return anfrage<Plan>(`/api/standorte/${standortId}/plaene`, { method: 'POST', body: formular })
+  },
+
+  planReferenzieren: (planId: number, version: number, bezugsplanId: number, passpunkte: PasspunktEingabe[]) =>
+    anfrage<Plan>(`/api/plaene/${planId}/referenzierung`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version, bezugsplanId, passpunkte })
+    }),
+
+  planAendern: (planId: number, version: number, bezeichnung: string, stockwerk: number) =>
+    anfrage<Plan>(`/api/plaene/${planId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version, bezeichnung, stockwerk })
+    }),
+
+  planLoeschen: (planId: number, version: number) =>
+    anfrage<void>(`/api/plaene/${planId}?version=${version}`, { method: 'DELETE' }),
+
   masterplanKalibrieren: (planId: number, version: number, nullpunkt: Punkt, strecken: StreckeEingabe[]) =>
     anfrage<Plan>(`/api/plaene/${planId}/kalibrierung`, {
       method: 'PUT',
@@ -158,7 +215,9 @@ export const api = {
       body: JSON.stringify({ name })
     }),
 
-  positionenImPlan: (planId: number) => anfrage<PositionImPlan[]>(`/api/plaene/${planId}/positionen`),
+  /** Positionen im Plan; mit `alleStockwerke` auch die anderer Stockwerke (Masterplan: immer alle) */
+  positionenImPlan: (planId: number, alleStockwerke = false) =>
+    anfrage<PositionImPlan[]>(`/api/plaene/${planId}/positionen${alleStockwerke ? '?uebersicht=true' : ''}`),
 
   positionErfassen: (standortId: number, planId: number, punkt: Punkt, daten: PositionDaten) =>
     anfrage<PositionImPlan>(`/api/standorte/${standortId}/positionen`, {

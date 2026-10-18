@@ -57,6 +57,23 @@ public static class StandortEndpunkte
         gruppe.MapPost("/{id:int}/masterplan", MasterplanImportieren)
             .DisableAntiforgery() // Schutz über den Pflicht-Header X-NetzDoku, siehe Program.cs
             .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(MaxPdfGroesse));
+
+        // Alle aktiven Pläne: Masterplan zuerst, dann nach Stockwerk und Bezeichnung
+        gruppe.MapGet("/{id:int}/plaene", async (int id, NetzDbContext db, CancellationToken abbruch) =>
+        {
+            if (!await db.Standorte.AnyAsync(s => s.Id == id, abbruch)) return Fehler.NichtGefunden("Standort nicht gefunden.");
+            var plaene = await db.Plaene.AsNoTracking()
+                .Where(p => p.StandortId == id && p.Aktiv)
+                .OrderByDescending(p => p.IstMasterplan).ThenBy(p => p.Stockwerk).ThenBy(p => p.Bezeichnung)
+                .Select(p => new PlanListeDto(p.Id, p.Bezeichnung, p.Stockwerk, p.IstMasterplan, p.Methode.ToString(),
+                    p.Referenziert, p.BezugsplanId))
+                .ToListAsync(abbruch);
+            return Results.Ok(plaene);
+        });
+
+        gruppe.MapPost("/{id:int}/plaene", PlanImportieren)
+            .DisableAntiforgery()
+            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(MaxPdfGroesse));
     }
 
     /// <summary>
@@ -73,6 +90,77 @@ public static class StandortEndpunkte
         if (await db.Plaene.AnyAsync(p => p.StandortId == id && p.IstMasterplan && p.Aktiv, abbruch))
             return Fehler.Konflikt($"Der Standort «{standort.Name}» hat bereits einen Masterplan.");
 
+        return await Importieren(datei, db, ablage, log, abbruch,
+            (pdfName, bildName, bild) => new Plan
+            {
+                Standort = standort,
+                Bezeichnung = BezeichnungAus(bezeichnung, datei!.FileName, "Masterplan"),
+                PdfDatei = pdfName,
+                BildDatei = bildName,
+                BildBreite = bild.Breite,
+                BildHoehe = bild.Hoehe,
+                Stockwerk = 0,
+                IstMasterplan = true,
+                Methode = Referenzierungsmethode.Master,
+                Massstab = 1
+            },
+            $"Der Standort «{standort.Name}» hat bereits einen Masterplan.");
+    }
+
+    /// <summary>
+    /// Use Case «Plan importieren»: weiterer Plan (Gebäude, Geschoss, Raum) mit Stockwerk und Bezugsplan.
+    /// Die Passpunkte werden im nächsten Schritt gesetzt (PUT /api/plaene/{id}/referenzierung).
+    /// </summary>
+    private static async Task<IResult> PlanImportieren(
+        int id, IFormFile? datei, [Microsoft.AspNetCore.Mvc.FromForm] string? bezeichnung,
+        [Microsoft.AspNetCore.Mvc.FromForm] int? stockwerk, [Microsoft.AspNetCore.Mvc.FromForm] int? bezugsplanId,
+        NetzDbContext db, Planablage ablage, ILogger<Planablage> log, CancellationToken abbruch)
+    {
+        var standort = await db.Standorte.FindAsync([id], abbruch);
+        if (standort is null) return Fehler.NichtGefunden("Standort nicht gefunden.");
+
+        var stock = stockwerk ?? 0;
+        if (stock is < PositionEndpunkte.MinStockwerk or > PositionEndpunkte.MaxStockwerk)
+            return Fehler.Ungueltig($"Das Stockwerk muss zwischen {PositionEndpunkte.MinStockwerk} und {PositionEndpunkte.MaxStockwerk} liegen.");
+
+        // Vorgabe: Masterplan als Bezugsplan
+        var bezug = bezugsplanId is null
+            ? await db.Plaene.FirstOrDefaultAsync(p => p.StandortId == id && p.IstMasterplan && p.Aktiv, abbruch)
+            : await db.Plaene.FirstOrDefaultAsync(p => p.Id == bezugsplanId && p.StandortId == id && p.Aktiv, abbruch);
+        if (bezug is null)
+            return Fehler.Ungueltig(bezugsplanId is null
+                ? "Bitte zuerst den Masterplan importieren."
+                : "Der Bezugsplan gehört nicht zu diesem Standort.");
+        if (!bezug.Referenziert)
+            return Fehler.Ungueltig($"Der Bezugsplan «{bezug.Bezeichnung}» ist noch nicht referenziert.");
+
+        var name = BezeichnungAus(bezeichnung, datei?.FileName ?? "", "Plan");
+        if (await db.Plaene.AnyAsync(p => p.StandortId == id && p.Aktiv && p.Bezeichnung == name, abbruch))
+            return Fehler.Konflikt($"Es gibt bereits einen Plan «{name}».");
+
+        return await Importieren(datei, db, ablage, log, abbruch,
+            (pdfName, bildName, bild) => new Plan
+            {
+                Standort = standort,
+                Bezeichnung = name,
+                PdfDatei = pdfName,
+                BildDatei = bildName,
+                BildBreite = bild.Breite,
+                BildHoehe = bild.Hoehe,
+                Stockwerk = stock,
+                IstMasterplan = false,
+                Methode = Referenzierungsmethode.Passpunkte,
+                BezugsplanId = bezug.Id,
+                Massstab = 1
+            },
+            $"Es gibt bereits einen Plan «{name}».");
+    }
+
+    /// <summary>PDF prüfen, in die Ablage übernehmen, Planbild erzeugen und den Plan speichern.</summary>
+    private static async Task<IResult> Importieren(
+        IFormFile? datei, NetzDbContext db, Planablage ablage, ILogger<Planablage> log, CancellationToken abbruch,
+        Func<string, string, Planbild, Plan> neuerPlan, string meldungDoppelt)
+    {
         if (datei is null || datei.Length == 0) return Fehler.Ungueltig("Bitte eine PDF-Datei auswählen.");
         if (datei.Length > MaxPdfGroesse) return Fehler.Ungueltig("Die Datei ist grösser als 100 MB.");
 
@@ -96,24 +184,12 @@ public static class StandortEndpunkte
                 bild = PdfUmwandlung.AlsPngSpeichern(pdf, ablage.VollerPfad(bildName));
             }
 
-            var plan = new Plan
-            {
-                Standort = standort,
-                Bezeichnung = BezeichnungAus(bezeichnung, datei.FileName),
-                PdfDatei = pdfName,
-                BildDatei = bildName,
-                BildBreite = bild.Breite,
-                BildHoehe = bild.Hoehe,
-                Stockwerk = 0,
-                IstMasterplan = true,
-                Methode = Referenzierungsmethode.Master,
-                Massstab = 1
-            };
+            var plan = neuerPlan(pdfName, bildName, bild);
             db.Plaene.Add(plan);
             await db.SaveChangesAsync(abbruch);
 
-            log.LogInformation("Masterplan {Plan} für Standort {Standort} importiert ({Breite}×{Hoehe} px)",
-                plan.Id, standort.Name, bild.Breite, bild.Hoehe);
+            log.LogInformation("Plan {Plan} «{Bezeichnung}» importiert ({Breite}×{Hoehe} px)",
+                plan.Id, plan.Bezeichnung, bild.Breite, bild.Hoehe);
             return Results.Created($"/api/plaene/{plan.Id}", PlanDto.Aus(plan));
         }
         catch (PdfFehler e)
@@ -124,7 +200,7 @@ public static class StandortEndpunkte
         catch (DbUpdateException e) when (Fehler.IstDoppelt(e))
         {
             Aufraeumen();
-            return Fehler.Konflikt($"Der Standort «{standort.Name}» hat bereits einen Masterplan.");
+            return Fehler.Konflikt(meldungDoppelt);
         }
         catch
         {
@@ -139,12 +215,12 @@ public static class StandortEndpunkte
         }
     }
 
-    private static string BezeichnungAus(string? bezeichnung, string dateiname)
+    private static string BezeichnungAus(string? bezeichnung, string dateiname, string ersatz)
     {
         var text = string.IsNullOrWhiteSpace(bezeichnung)
             ? Path.GetFileNameWithoutExtension(dateiname)
             : bezeichnung.Trim();
-        if (string.IsNullOrWhiteSpace(text)) text = "Masterplan";
+        if (string.IsNullOrWhiteSpace(text)) text = ersatz;
         return text.Length > 100 ? text[..100] : text;
     }
 }

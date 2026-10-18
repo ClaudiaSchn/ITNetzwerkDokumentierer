@@ -16,12 +16,15 @@ public static class PlanEndpunkte
 
         gruppe.MapGet("/{id:int}", async (int id, NetzDbContext db, CancellationToken abbruch) =>
         {
-            var plan = await db.Plaene.AsNoTracking().Include(p => p.Messstrecken)
+            var plan = await db.Plaene.AsNoTracking().Include(p => p.Messstrecken).Include(p => p.Passpunkte)
                 .FirstOrDefaultAsync(p => p.Id == id, abbruch);
             return plan is null ? Fehler.NichtGefunden("Plan nicht gefunden.") : Results.Ok(PlanDto.Aus(plan));
         });
 
         gruppe.MapPut("/{id:int}/kalibrierung", MasterKalibrieren);
+        gruppe.MapPut("/{id:int}/referenzierung", Referenzieren);
+        gruppe.MapPut("/{id:int}", Aendern);
+        gruppe.MapDelete("/{id:int}", Loeschen);
 
         // Planbild (PNG). Dateinamen sind eindeutig und ändern sich nie → darf lange gecacht werden.
         gruppe.MapGet("/{id:int}/bild", async (int id, NetzDbContext db, Planablage ablage, HttpContext http,
@@ -52,7 +55,8 @@ public static class PlanEndpunkte
     private static async Task<IResult> MasterKalibrieren(
         int id, MasterKalibrierungEingabe eingabe, NetzDbContext db, CancellationToken abbruch)
     {
-        var plan = await db.Plaene.Include(p => p.Messstrecken).FirstOrDefaultAsync(p => p.Id == id, abbruch);
+        var plan = await db.Plaene.Include(p => p.Messstrecken).Include(p => p.Passpunkte)
+            .FirstOrDefaultAsync(p => p.Id == id, abbruch);
         if (plan is null) return Fehler.NichtGefunden("Plan nicht gefunden.");
         if (!plan.IstMasterplan)
             return Fehler.Ungueltig("Nur der Masterplan wird über Nullpunkt und Strecken kalibriert.");
@@ -101,9 +105,13 @@ public static class PlanEndpunkte
             LaengeMeter = s.LaengeMeter
         }).ToList();
 
+        // Pläne, die auf den Masterplan referenziert sind, verschieben sich mit
+        var plaene = await Referenzierung.PlaeneMitPasspunkten(db, plan.StandortId, abbruch);
+        Referenzierung.NachfolgerNeuBerechnen(plaene, plan);
+
         try
         {
-            // SaveChanges speichert Plan und Messstrecken gemeinsam in einer Transaktion
+            // SaveChanges speichert Plan, Messstrecken und abhängige Pläne gemeinsam in einer Transaktion
             await db.SaveChangesAsync(abbruch);
         }
         catch (DbUpdateConcurrencyException)
@@ -115,4 +123,137 @@ public static class PlanEndpunkte
         await db.Entry(plan).ReloadAsync(abbruch);
         return Results.Ok(PlanDto.Aus(plan));
     }
+
+    /// <summary>
+    /// Use Case «Über Passpunkte referenzieren»: zwei Punkte, die im Plan und im Bezugsplan erkennbar
+    /// sind, ergeben Massstab, Drehung und Versatz. Kann wiederholt werden (auch mit anderem Bezugsplan).
+    /// Pläne, die auf diesen Plan referenziert sind, werden mitgeführt.
+    /// </summary>
+    private static async Task<IResult> Referenzieren(
+        int id, ReferenzierungEingabe eingabe, NetzDbContext db, CancellationToken abbruch)
+    {
+        var plan = await db.Plaene.Include(p => p.Messstrecken).Include(p => p.Passpunkte)
+            .FirstOrDefaultAsync(p => p.Id == id, abbruch);
+        if (plan is null) return Fehler.NichtGefunden("Plan nicht gefunden.");
+        if (plan.IstMasterplan) return Fehler.Ungueltig("Der Masterplan wird über Nullpunkt und Strecken kalibriert.");
+        if (!plan.Aktiv) return Fehler.Ungueltig("Dieser Plan wurde ersetzt und kann nicht mehr referenziert werden.");
+
+        var plaene = await Referenzierung.PlaeneMitPasspunkten(db, plan.StandortId, abbruch);
+        var bezug = plaene.FirstOrDefault(p => p.Id == eingabe.BezugsplanId);
+        if (bezug is null) return Fehler.Ungueltig("Der Bezugsplan gehört nicht zu diesem Standort.");
+        if (bezug.Id == plan.Id || Referenzierung.Nachfolger(plaene, plan.Id).Contains(bezug.Id))
+            return Fehler.Ungueltig($"«{bezug.Bezeichnung}» ist selbst auf diesen Plan referenziert und kann nicht Bezugsplan sein.");
+        if (!bezug.Referenziert)
+            return Fehler.Ungueltig($"Der Bezugsplan «{bezug.Bezeichnung}» ist noch nicht referenziert.");
+
+        if (eingabe.Passpunkte is not { Count: 2 }) return Fehler.Ungueltig("Bitte zwei Passpunkte setzen.");
+        var pp = eingabe.Passpunkte;
+        for (var i = 0; i < 2; i++)
+        {
+            if (!ImPlan(plan, pp[i].PlanU, pp[i].PlanV))
+                return Fehler.Ungueltig($"Passpunkt {i + 1} liegt ausserhalb des Plans.");
+            if (!ImPlan(bezug, pp[i].BezugU, pp[i].BezugV))
+                return Fehler.Ungueltig($"Passpunkt {i + 1} liegt ausserhalb des Bezugsplans.");
+        }
+        if (Geometrie.Abstand(new(pp[0].PlanU, pp[0].PlanV), new(pp[1].PlanU, pp[1].PlanV)) < MinStreckePixel)
+            return Fehler.Ungueltig("Die Passpunkte liegen im Plan zu nahe beieinander. Bitte zwei weit auseinanderliegende Punkte wählen.");
+        if (Geometrie.Abstand(new(pp[0].BezugU, pp[0].BezugV), new(pp[1].BezugU, pp[1].BezugV)) < MinStreckePixel)
+            return Fehler.Ungueltig("Die Passpunkte liegen im Bezugsplan zu nahe beieinander. Bitte zwei weit auseinanderliegende Punkte wählen.");
+
+        db.Entry(plan).Property(p => p.Version).OriginalValue = eingabe.Version;
+
+        db.Passpunkte.RemoveRange(plan.Passpunkte);
+        plan.Passpunkte = pp.Select((p, i) => new Passpunkt
+        {
+            Nummer = i + 1, PlanX = p.PlanU, PlanY = p.PlanV, BezugX = p.BezugU, BezugY = p.BezugV
+        }).ToList();
+        plan.BezugsplanId = bezug.Id;
+        plan.Bezugsplan = bezug;
+        plan.Methode = Referenzierungsmethode.Passpunkte;
+        Referenzierung.AusPasspunkten(plan, bezug);
+        db.Entry(plan).Property(p => p.Massstab).IsModified = true; // Versionsprüfung erzwingen
+
+        Referenzierung.NachfolgerNeuBerechnen(plaene, plan);
+
+        try
+        {
+            await db.SaveChangesAsync(abbruch);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Fehler.Geaendert();
+        }
+
+        await db.Entry(plan).ReloadAsync(abbruch);
+        return Results.Ok(PlanDto.Aus(plan));
+    }
+
+    /// <summary>Bezeichnung und Stockwerk eines Plans ändern (Masterplan: Stockwerk bleibt 0).</summary>
+    private static async Task<IResult> Aendern(int id, PlanAendern eingabe, NetzDbContext db, CancellationToken abbruch)
+    {
+        var plan = await db.Plaene.Include(p => p.Messstrecken).Include(p => p.Passpunkte)
+            .FirstOrDefaultAsync(p => p.Id == id, abbruch);
+        if (plan is null) return Fehler.NichtGefunden("Plan nicht gefunden.");
+
+        var name = eingabe.Bezeichnung?.Trim() ?? "";
+        if (name.Length is 0 or > 100) return Fehler.Ungueltig("Bitte eine Bezeichnung (höchstens 100 Zeichen) angeben.");
+        if (plan.IstMasterplan && eingabe.Stockwerk != 0)
+            return Fehler.Ungueltig("Der Masterplan liegt immer auf Stockwerk 0.");
+        if (eingabe.Stockwerk is < PositionEndpunkte.MinStockwerk or > PositionEndpunkte.MaxStockwerk)
+            return Fehler.Ungueltig($"Das Stockwerk muss zwischen {PositionEndpunkte.MinStockwerk} und {PositionEndpunkte.MaxStockwerk} liegen.");
+        if (await db.Plaene.AnyAsync(p => p.StandortId == plan.StandortId && p.Aktiv && p.Id != id && p.Bezeichnung == name, abbruch))
+            return Fehler.Konflikt($"Es gibt bereits einen Plan «{name}».");
+
+        db.Entry(plan).Property(p => p.Version).OriginalValue = eingabe.Version;
+        plan.Bezeichnung = name;
+        plan.Stockwerk = eingabe.Stockwerk;
+        db.Entry(plan).Property(p => p.Bezeichnung).IsModified = true;
+
+        try
+        {
+            await db.SaveChangesAsync(abbruch);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Fehler.Geaendert();
+        }
+        await db.Entry(plan).ReloadAsync(abbruch);
+        return Results.Ok(PlanDto.Aus(plan));
+    }
+
+    /// <summary>
+    /// Plan löschen (z.B. falsches PDF importiert). Positionen bleiben erhalten, sie hängen an
+    /// absoluten Koordinaten, nicht am Plan. Gesperrt, solange andere Pläne darauf referenziert sind.
+    /// </summary>
+    private static async Task<IResult> Loeschen(int id, uint version, NetzDbContext db, Planablage ablage, CancellationToken abbruch)
+    {
+        var plan = await db.Plaene.FirstOrDefaultAsync(p => p.Id == id, abbruch);
+        if (plan is null) return Fehler.NichtGefunden("Plan nicht gefunden.");
+        if (plan.IstMasterplan) return Fehler.Ungueltig("Der Masterplan kann nicht gelöscht werden.");
+
+        var abhaengig = await db.Plaene.Where(p => p.BezugsplanId == id || p.ErsetztPlanId == id)
+            .Select(p => p.Bezeichnung).ToListAsync(abbruch);
+        if (abhaengig.Count > 0)
+            return Fehler.Konflikt(
+                $"Auf diesen Plan sind noch referenziert: {string.Join(", ", abhaengig.Select(b => $"«{b}»"))}. " +
+                "Bitte diese zuerst auf einen anderen Plan referenzieren oder löschen.");
+
+        db.Entry(plan).Property(p => p.Version).OriginalValue = version;
+        db.Plaene.Remove(plan);
+        try
+        {
+            await db.SaveChangesAsync(abbruch);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Fehler.Geaendert();
+        }
+
+        ablage.Loeschen(plan.PdfDatei);
+        ablage.Loeschen(plan.BildDatei);
+        return Results.NoContent();
+    }
+
+    private static bool ImPlan(Plan plan, double u, double v) =>
+        u >= 0 && v >= 0 && u <= plan.BildBreite && v <= plan.BildHoehe;
 }
