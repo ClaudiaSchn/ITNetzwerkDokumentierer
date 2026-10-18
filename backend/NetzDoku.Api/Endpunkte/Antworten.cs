@@ -19,6 +19,27 @@ public record PasspunktDto(int Nummer, double PlanU, double PlanV, double BezugU
 public record PlanListeDto(
     int Id, string Bezeichnung, int Stockwerk, bool IstMasterplan, string Methode, bool Referenziert, int? BezugsplanId);
 
+/// <summary>Linie im Plan (Planeinheiten), z.B. eine Richtung.</summary>
+public record LinieDto(double U1, double V1, double U2, double V2);
+
+/// <summary>Angaben einer Referenzierung mit eigenem Massstab (Massstab über die Messstrecken).</summary>
+public record EigenerMassstabDto(
+    PunktDto Anker, PunktDto? AnkerBezug, double? AnkerX, double? AnkerY,
+    double? Winkel, LinieDto? RichtungPlan, LinieDto? RichtungBezug)
+{
+    public static EigenerMassstabDto? Aus(string? json)
+    {
+        var d = EigenerMassstabDaten.AusJson(json);
+        if (d is null) return null;
+        static LinieDto? L(Richtungslinie? r) => r is null ? null : new LinieDto(r.Von.U, r.Von.V, r.Bis.U, r.Bis.V);
+        return new EigenerMassstabDto(
+            new PunktDto(d.Anker.U, d.Anker.V),
+            d.AnkerBezug is { } b ? new PunktDto(b.U, b.V) : null,
+            d.AnkerAbsolut?.X, d.AnkerAbsolut?.Y,
+            d.Winkel, L(d.RichtungPlan), L(d.RichtungBezug));
+    }
+}
+
 public record MessstreckeDto(int Nummer, double U1, double V1, double U2, double V2, double LaengeMeter, double Massstab);
 
 public record PlanDto(
@@ -42,7 +63,8 @@ public record PlanDto(
     IReadOnlyList<MessstreckeDto> Messstrecken,
     double? AbweichungProzent,
     int? BezugsplanId,
-    IReadOnlyList<PasspunktDto> Passpunkte)
+    IReadOnlyList<PasspunktDto> Passpunkte,
+    EigenerMassstabDto? EigenerMassstab)
 {
     /// <summary>Erwartet einen Plan mit geladenen <see cref="Plan.Messstrecken"/> und <see cref="Plan.Passpunkte"/>.</summary>
     public static PlanDto Aus(Plan p)
@@ -71,7 +93,8 @@ public record PlanDto(
             p.Referenziert, p.Massstab, p.Drehung, p.VersatzX, p.VersatzY, nullpunkt, strecken, abweichung,
             p.BezugsplanId,
             p.Passpunkte.OrderBy(x => x.Nummer)
-                .Select(x => new PasspunktDto(x.Nummer, x.PlanX, x.PlanY, x.BezugX, x.BezugY)).ToList());
+                .Select(x => new PasspunktDto(x.Nummer, x.PlanX, x.PlanY, x.BezugX, x.BezugY)).ToList(),
+            EigenerMassstabDto.Aus(p.EigenerMassstabDaten));
     }
 }
 
@@ -87,6 +110,16 @@ public record PasspunktEingabe(double PlanU, double PlanV, double BezugU, double
 
 /// <summary>Referenzierung über zwei Passpunkte. <see cref="Version"/> = Version des Plans beim Laden.</summary>
 public record ReferenzierungEingabe(uint Version, int BezugsplanId, List<PasspunktEingabe>? Passpunkte);
+
+/// <summary>
+/// Referenzierung mit eigenem Massstab: 1–2 bekannte Strecken; Ankerpunkt im Plan und dazu entweder
+/// <see cref="AnkerBezug"/> (Klick im Bezugsplan) oder <see cref="AnkerX"/>/<see cref="AnkerY"/> (Meter);
+/// Drehung entweder als <see cref="Winkel"/> (Grad) oder als Richtung in Plan und Bezugsplan.
+/// </summary>
+public record EigenerMassstabEingabe(
+    uint Version, int BezugsplanId, List<StreckeEingabe>? Strecken,
+    PunktDto? Anker, PunktDto? AnkerBezug, double? AnkerX, double? AnkerY,
+    double? Winkel, LinieDto? RichtungPlan, LinieDto? RichtungBezug);
 
 /// <summary>Bezeichnung und Stockwerk eines Plans ändern.</summary>
 public record PlanAendern(uint Version, string? Bezeichnung, int Stockwerk);

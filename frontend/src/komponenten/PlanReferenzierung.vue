@@ -2,8 +2,9 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { api, type Plan, type PlanListe, type Punkt } from '../api'
 import { abstand, formatDrehung, formatMassstab, formatZahl, nachAbsolut, nachPlan, richteAus } from '../geometrie'
-import { stockwerkText } from '../format'
+import { planText, waehlbareBezugsplaene } from '../plaene'
 import type { Linie, Markierung } from './PlanAnsicht.vue'
+import MethodenWahl, { type Methode } from './MethodenWahl.vue'
 
 /** links = der zu referenzierende Plan, rechts = Bezugsplan */
 export type Seite = 'links' | 'rechts'
@@ -12,15 +13,26 @@ export type Seite = 'links' | 'rechts'
 export interface ReferenzAnzeige {
   bezug: Plan | null
   links: Markierung[]
+  linienLinks: Linie[]
   rechts: Markierung[]
   linienRechts: Linie[]
-  klick: boolean
+  /** Klicks in die jeweilige Planansicht erwartet */
+  klickLinks: boolean
+  klickRechts: boolean
+}
+
+/** Was die Seite von einem Referenzier-Werkzeug aufruft (Passpunkte oder eigener Massstab) */
+export interface ReferenzWerkzeug {
+  klick: (seite: Seite, p: Punkt) => void
+  verschoben: (seite: Seite, id: string, p: Punkt) => void
+  zeiger: (seite: Seite, p: Punkt | null) => void
 }
 
 const props = defineProps<{ plan: Plan; plaene: PlanListe[] }>()
 const emit = defineEmits<{
   gespeichert: [plan: Plan]
   abbrechen: []
+  methode: [methode: Methode]
   anzeige: [anzeige: ReferenzAnzeige]
   /** Entsprechender Punkt zum Mauszeiger im jeweils anderen Plan */
   kontrolle: [links: Punkt | null, rechts: Punkt | null]
@@ -44,19 +56,10 @@ const bezug = ref<Plan | null>(null)
 const fehler = ref<string | null>(null)
 const speichert = ref(false)
 
-// Wählbar: referenzierte Pläne, ausser dieser Plan selbst und Pläne, die (über eine Kette) auf ihm aufbauen
-const waehlbar = computed(() => {
-  const nachfolger = new Set<number>()
-  let neu = [props.plan.id]
-  while (neu.length) {
-    neu = props.plaene.filter((p) => p.bezugsplanId !== null && neu.includes(p.bezugsplanId) && !nachfolger.has(p.id)).map((p) => p.id)
-    neu.forEach((id) => nachfolger.add(id))
-  }
-  return props.plaene.filter((p) => p.referenziert && p.id !== props.plan.id && !nachfolger.has(p.id))
-})
+const waehlbar = computed(() => waehlbareBezugsplaene(props.plan.id, props.plaene))
 
 // Bestehende Referenzierung übernehmen, damit sie angepasst werden kann
-if (props.plan.passpunkte.length === 2) {
+if (props.plan.methode === 'Passpunkte' && props.plan.passpunkte.length === 2) {
   props.plan.passpunkte.forEach((p, i) => {
     paare[i] = { links: { u: p.planU, v: p.planV }, rechts: { u: p.bezugU, v: p.bezugV } }
   })
@@ -170,7 +173,8 @@ watch(
       ].map((e) => nachPlan(bezug.value!, nachAbsolut(lage.value!, e)))
       ecken.forEach((e, i) => linienRechts.push({ id: `umriss${i}`, von: e, bis: ecken[(i + 1) % 4] }))
     }
-    emit('anzeige', { bezug: bezug.value, links, rechts, linienRechts, klick: aktiv.value !== null })
+    const klick = aktiv.value !== null
+    emit('anzeige', { bezug: bezug.value, links, linienLinks: [], rechts, linienRechts, klickLinks: klick, klickRechts: klick })
   },
   { deep: true, immediate: true }
 )
@@ -198,13 +202,12 @@ async function speichern() {
     speichert.value = false
   }
 }
-
-const planText = (p: PlanListe) => `${p.bezeichnung}${p.istMasterplan ? ' (Masterplan)' : ` · ${stockwerkText(p.stockwerk)}`}`
 </script>
 
 <template>
   <aside class="seitenleiste">
     <h2>Plan referenzieren</h2>
+    <MethodenWahl methode="Passpunkte" @wechseln="(m) => emit('methode', m)" />
     <p class="leise klein">
       Wählen Sie zwei Punkte, die in beiden Plänen gut erkennbar sind – möglichst weit auseinander. Links ist dieser
       Plan, rechts der Bezugsplan. Gesetzte Punkte lassen sich mit der Maus verschieben.

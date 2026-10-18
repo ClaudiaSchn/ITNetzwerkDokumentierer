@@ -90,6 +90,71 @@ public class ReferenzierungTests
         Assert.Empty(Referenzierung.Nachfolger(plaene, 5));
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(30)]
+    [InlineData(-90)]
+    [InlineData(200)] // wird zu −160°
+    public void Eigener_Massstab_mit_Winkel_trifft_den_Ankerpunkt(double winkel)
+    {
+        var a = Geometrie.MitEigenemMassstab(0.0127, winkel, new Planpunkt(300, 900), new Weltpunkt(150, -60));
+        var plan = new Plan { Massstab = a.Massstab, Drehung = a.Drehung, VersatzX = a.VersatzX, VersatzY = a.VersatzY };
+
+        var w = Geometrie.NachAbsolut(plan, new Planpunkt(300, 900));
+
+        Assert.Equal(150, w.X, Genau);
+        Assert.Equal(-60, w.Y, Genau);
+        Assert.InRange(a.Drehung, -180, 180);
+        Assert.Equal(Geometrie.NormiereWinkel(winkel), a.Drehung, Genau);
+    }
+
+    [Fact]
+    public void Richtung_ergibt_die_Drehung()
+    {
+        // Im Plan zeigt der Nordpfeil um 30° nach rechts geneigt; im Masterplan (Drehung 0) gerade nach oben
+        var t = 60 * Math.PI / 180; // Richtung des Pfeils im Plan, gemessen wie absolut
+        var von = new Planpunkt(500, 500);
+        var bis = new Planpunkt(500 + 100 * Math.Cos(t), 500 - 100 * Math.Sin(t));
+        var master = new Plan { Id = 1, Massstab = 0.1, Referenziert = true };
+        var plan = new Plan
+        {
+            Id = 2, BezugsplanId = 1, Methode = Referenzierungsmethode.EigenerMassstab,
+            Messstrecken = [new() { Nummer = 1, U1 = 0, V1 = 0, U2 = 1000, V2 = 0, LaengeMeter = 12.7 }],
+            EigenerMassstabDaten = new EigenerMassstabDaten(
+                new Planpunkt(0, 0), null, new Weltpunkt(150, -60), null,
+                new Richtungslinie(von, bis), new Richtungslinie(new(100, 300), new(100, 100))).AlsJson()
+        };
+
+        Referenzierung.AusEigenemMassstab(plan, master);
+
+        Assert.Equal(30, plan.Drehung, Genau);
+        Assert.Equal(0.0127, plan.Massstab, 1e-12);
+        var anker = Geometrie.NachAbsolut(plan, new Planpunkt(0, 0));
+        Assert.Equal(150, anker.X, Genau);
+        Assert.Equal(-60, anker.Y, Genau);
+    }
+
+    [Fact]
+    public void Eigener_Massstab_mit_Anker_im_Bezugsplan_wandert_mit()
+    {
+        var master = new Plan { Id = 1, Massstab = 0.1, Referenziert = true, IstMasterplan = true };
+        var plan = new Plan
+        {
+            Id = 2, BezugsplanId = 1, Methode = Referenzierungsmethode.EigenerMassstab, Referenziert = true,
+            Messstrecken = [new() { Nummer = 1, U1 = 0, V1 = 0, U2 = 100, V2 = 0, LaengeMeter = 1 }],
+            EigenerMassstabDaten = new EigenerMassstabDaten(
+                new Planpunkt(10, 10), new Planpunkt(500, 200), null, 0, null, null).AlsJson()
+        };
+        Referenzierung.AusEigenemMassstab(plan, master);
+        Assert.Equal(50, Geometrie.NachAbsolut(plan, new(10, 10)).X, Genau);
+
+        master.VersatzX = 7;
+        Referenzierung.NachfolgerNeuBerechnen([master, plan], master);
+
+        Assert.Equal(57, Geometrie.NachAbsolut(plan, new(10, 10)).X, Genau);
+        Assert.Equal(-20, Geometrie.NachAbsolut(plan, new(10, 10)).Y, Genau);
+    }
+
     private static Plan MitPasspunkten(int id, int bezug,
         (double u, double v, double bu, double bv) a, (double u, double v, double bu, double bv) b) => new()
     {

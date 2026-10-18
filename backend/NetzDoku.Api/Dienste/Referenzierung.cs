@@ -1,8 +1,34 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using NetzDoku.Api.Data;
 using NetzDoku.Api.Modell;
 
 namespace NetzDoku.Api.Dienste;
+
+/// <summary>Linie im Plan von <see cref="Von"/> nach <see cref="Bis"/> (Planeinheiten).</summary>
+public record Richtungslinie(Planpunkt Von, Planpunkt Bis);
+
+/// <summary>
+/// Angaben einer Referenzierung mit eigenem Massstab (Massstab selbst: über die Messstrecken).
+/// Lage: Ankerpunkt im Plan und entweder derselbe Punkt im Bezugsplan oder seine Koordinate in Metern.
+/// Drehung: entweder als Winkel oder als Richtung (Linie im Plan und dieselbe Richtung im Bezugsplan,
+/// z.B. beide Nordpfeile).
+/// </summary>
+public record EigenerMassstabDaten(
+    Planpunkt Anker,
+    Planpunkt? AnkerBezug,
+    Weltpunkt? AnkerAbsolut,
+    double? Winkel,
+    Richtungslinie? RichtungPlan,
+    Richtungslinie? RichtungBezug)
+{
+    private static readonly JsonSerializerOptions Optionen = new(JsonSerializerDefaults.Web);
+
+    public string AlsJson() => JsonSerializer.Serialize(this, Optionen);
+
+    public static EigenerMassstabDaten? AusJson(string? json) =>
+        string.IsNullOrEmpty(json) ? null : JsonSerializer.Deserialize<EigenerMassstabDaten>(json, Optionen);
+}
 
 /// <summary>
 /// Referenzieren von Plänen über Passpunkte und Pflege der Bezugskette
@@ -31,9 +57,39 @@ public static class Referenzierung
         plan.Referenziert = true;
     }
 
-    /// <summary>Alle aktiven Pläne eines Standorts mit Passpunkten (werden verfolgt, d.h. Änderungen werden gespeichert).</summary>
-    public static Task<List<Plan>> PlaeneMitPasspunkten(NetzDbContext db, int standortId, CancellationToken abbruch) =>
-        db.Plaene.Include(p => p.Passpunkte).Where(p => p.StandortId == standortId && p.Aktiv).ToListAsync(abbruch);
+    /// <summary>
+    /// Berechnet Massstab (aus den Messstrecken), Drehung und Versatz eines Plans mit eigenem Massstab.
+    /// Erwartet geladene <see cref="Plan.Messstrecken"/> und gesetzte <see cref="Plan.EigenerMassstabDaten"/>.
+    /// </summary>
+    public static void AusEigenemMassstab(Plan plan, Plan bezug)
+    {
+        var d = EigenerMassstabDaten.AusJson(plan.EigenerMassstabDaten)
+                ?? throw new InvalidOperationException("Angaben zum eigenen Massstab fehlen.");
+        var strecken = plan.Messstrecken.OrderBy(m => m.Nummer)
+            .Select(m => new BekannteStrecke(new(m.U1, m.V1), new(m.U2, m.V2), m.LaengeMeter)).ToList();
+        if (!bezug.Referenziert && (d.AnkerAbsolut is null || d.Winkel is null))
+            throw new InvalidOperationException("Der Bezugsplan ist nicht referenziert.");
+
+        var drehung = d.Winkel ?? (
+            Geometrie.RichtungAbsolut(Geometrie.NachAbsolut(bezug, d.RichtungBezug!.Von), Geometrie.NachAbsolut(bezug, d.RichtungBezug.Bis))
+            - Geometrie.RichtungImPlan(d.RichtungPlan!.Von, d.RichtungPlan.Bis));
+        var anker = d.AnkerAbsolut ?? Geometrie.NachAbsolut(bezug, d.AnkerBezug!.Value);
+
+        var a = Geometrie.MitEigenemMassstab(Geometrie.MassstabAus(strecken), drehung, d.Anker, anker);
+        plan.Massstab = a.Massstab;
+        plan.Drehung = a.Drehung;
+        plan.VersatzX = a.VersatzX;
+        plan.VersatzY = a.VersatzY;
+        plan.Referenziert = true;
+    }
+
+    /// <summary>
+    /// Alle aktiven Pläne eines Standorts mit Passpunkten und Messstrecken (werden verfolgt, d.h.
+    /// Änderungen werden gespeichert).
+    /// </summary>
+    public static Task<List<Plan>> PlaeneMitLageangaben(NetzDbContext db, int standortId, CancellationToken abbruch) =>
+        db.Plaene.Include(p => p.Passpunkte).Include(p => p.Messstrecken)
+            .Where(p => p.StandortId == standortId && p.Aktiv).ToListAsync(abbruch);
 
     /// <summary>Ids aller Pläne, die direkt oder über eine Kette auf <paramref name="planId"/> referenziert sind.</summary>
     public static HashSet<int> Nachfolger(IEnumerable<Plan> plaene, int planId)
@@ -67,9 +123,16 @@ public static class Referenzierung
             foreach (var kind in kinder[eltern.Id])
             {
                 if (!besucht.Add(kind.Id)) continue; // Schutz gegen Zyklen
-                if (kind.Methode == Referenzierungsmethode.Passpunkte && kind.Referenziert && kind.Passpunkte.Count == 2)
+                if (!kind.Referenziert) { offen.Enqueue(kind); continue; }
+                if (kind.Methode == Referenzierungsmethode.Passpunkte && kind.Passpunkte.Count == 2)
                 {
                     AusPasspunkten(kind, eltern);
+                    anzahl++;
+                }
+                else if (kind.Methode == Referenzierungsmethode.EigenerMassstab && kind.EigenerMassstabDaten is not null
+                         && kind.Messstrecken.Count > 0)
+                {
+                    AusEigenemMassstab(kind, eltern);
                     anzahl++;
                 }
                 offen.Enqueue(kind);

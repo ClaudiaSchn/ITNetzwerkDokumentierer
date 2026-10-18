@@ -45,6 +45,25 @@ export interface PasspunktEingabe {
   bezugV: number
 }
 
+/** Linie im Plan (Planeinheiten), z.B. eine Richtung */
+export interface LinieDaten {
+  u1: number
+  v1: number
+  u2: number
+  v2: number
+}
+
+/** Angaben einer Referenzierung mit eigenem Massstab (Massstab über die Messstrecken) */
+export interface EigenerMassstab {
+  anker: Punkt
+  ankerBezug: Punkt | null
+  ankerX: number | null
+  ankerY: number | null
+  winkel: number | null
+  richtungPlan: LinieDaten | null
+  richtungBezug: LinieDaten | null
+}
+
 /** Eintrag in der Planliste eines Standorts */
 export interface PlanListe {
   id: number
@@ -84,6 +103,7 @@ export interface Plan {
   abweichungProzent: number | null
   bezugsplanId: number | null
   passpunkte: Passpunkt[]
+  eigenerMassstab: EigenerMassstab | null
 }
 
 export interface Positionstyp {
@@ -187,6 +207,13 @@ export const api = {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ version, bezugsplanId, passpunkte })
+    }),
+
+  planEigenerMassstab: (planId: number, version: number, bezugsplanId: number, strecken: StreckeEingabe[], angaben: EigenerMassstab) =>
+    anfrage<Plan>(`/api/plaene/${planId}/eigener-massstab`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version, bezugsplanId, strecken, ...angaben })
     }),
 
   planAendern: (planId: number, version: number, bezeichnung: string, stockwerk: number) =>

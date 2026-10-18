@@ -101,7 +101,9 @@ async function loeschen() {
         <p v-if="!plan.istMasterplan" class="wert">Drehung: {{ formatDrehung(plan.drehung) }}</p>
         <p class="wert leise">
           {{ plan.istMasterplan ? 'Masterplan, kalibriert über Nullpunkt und zwei Strecken'
-            : `Referenziert über zwei Passpunkte auf «${bezugsplan?.bezeichnung ?? '?'}»` }}
+            : plan.methode === 'EigenerMassstab'
+              ? `Eigener Massstab, Bezugsplan «${bezugsplan?.bezeichnung ?? '?'}»`
+              : `Referenziert über zwei Passpunkte auf «${bezugsplan?.bezeichnung ?? '?'}»` }}
         </p>
       </template>
       <p v-else class="wert warnung">Noch nicht referenziert.</p>

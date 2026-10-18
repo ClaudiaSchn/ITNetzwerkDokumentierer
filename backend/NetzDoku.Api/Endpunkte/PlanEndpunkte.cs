@@ -23,6 +23,7 @@ public static class PlanEndpunkte
 
         gruppe.MapPut("/{id:int}/kalibrierung", MasterKalibrieren);
         gruppe.MapPut("/{id:int}/referenzierung", Referenzieren);
+        gruppe.MapPut("/{id:int}/eigener-massstab", EigenerMassstab);
         gruppe.MapPut("/{id:int}", Aendern);
         gruppe.MapDelete("/{id:int}", Loeschen);
 
@@ -64,23 +65,10 @@ public static class PlanEndpunkte
         if (eingabe.Nullpunkt is null) return Fehler.Ungueltig("Bitte den Nullpunkt setzen.");
         if (eingabe.Strecken is not { Count: 2 }) return Fehler.Ungueltig("Bitte zwei bekannte Strecken angeben.");
 
-        bool ImPlan(double u, double v) => u >= 0 && v >= 0 && u <= plan.BildBreite && v <= plan.BildHoehe;
-        if (!ImPlan(eingabe.Nullpunkt.U, eingabe.Nullpunkt.V)) return Fehler.Ungueltig("Der Nullpunkt liegt ausserhalb des Plans.");
+        if (!ImPlan(plan, eingabe.Nullpunkt.U, eingabe.Nullpunkt.V)) return Fehler.Ungueltig("Der Nullpunkt liegt ausserhalb des Plans.");
 
-        var strecken = new List<BekannteStrecke>();
-        for (var i = 0; i < eingabe.Strecken.Count; i++)
-        {
-            var s = eingabe.Strecken[i];
-            var nr = i + 1;
-            if (!ImPlan(s.U1, s.V1) || !ImPlan(s.U2, s.V2))
-                return Fehler.Ungueltig($"Strecke {nr} liegt nicht vollständig im Plan.");
-            if (!(s.LaengeMeter > 0 && s.LaengeMeter <= 100_000))
-                return Fehler.Ungueltig($"Bitte für Strecke {nr} eine Länge zwischen 0 und 100 000 m angeben.");
-            var strecke = new BekannteStrecke(new Planpunkt(s.U1, s.V1), new Planpunkt(s.U2, s.V2), s.LaengeMeter);
-            if (strecke.PixelLaenge < MinStreckePixel)
-                return Fehler.Ungueltig($"Strecke {nr} ist zu kurz. Bitte eine möglichst lange bekannte Strecke wählen.");
-            strecken.Add(strecke);
-        }
+        var (strecken, streckenFehler) = StreckenPruefen(plan, eingabe.Strecken);
+        if (streckenFehler is not null) return streckenFehler;
 
         var ergebnis = Geometrie.KalibriereMaster(new Planpunkt(eingabe.Nullpunkt.U, eingabe.Nullpunkt.V), strecken);
 
@@ -97,16 +85,10 @@ public static class PlanEndpunkte
         // geschrieben werden – sonst prüft die Datenbank die Version nicht.
         db.Entry(plan).Property(p => p.Massstab).IsModified = true;
 
-        db.Messstrecken.RemoveRange(plan.Messstrecken);
-        plan.Messstrecken = strecken.Select((s, i) => new Messstrecke
-        {
-            Nummer = i + 1,
-            U1 = s.Anfang.U, V1 = s.Anfang.V, U2 = s.Ende.U, V2 = s.Ende.V,
-            LaengeMeter = s.LaengeMeter
-        }).ToList();
+        MessstreckenErsetzen(db, plan, strecken);
 
         // Pläne, die auf den Masterplan referenziert sind, verschieben sich mit
-        var plaene = await Referenzierung.PlaeneMitPasspunkten(db, plan.StandortId, abbruch);
+        var plaene = await Referenzierung.PlaeneMitLageangaben(db, plan.StandortId, abbruch);
         Referenzierung.NachfolgerNeuBerechnen(plaene, plan);
 
         try
@@ -138,7 +120,7 @@ public static class PlanEndpunkte
         if (plan.IstMasterplan) return Fehler.Ungueltig("Der Masterplan wird über Nullpunkt und Strecken kalibriert.");
         if (!plan.Aktiv) return Fehler.Ungueltig("Dieser Plan wurde ersetzt und kann nicht mehr referenziert werden.");
 
-        var plaene = await Referenzierung.PlaeneMitPasspunkten(db, plan.StandortId, abbruch);
+        var plaene = await Referenzierung.PlaeneMitLageangaben(db, plan.StandortId, abbruch);
         var bezug = plaene.FirstOrDefault(p => p.Id == eingabe.BezugsplanId);
         if (bezug is null) return Fehler.Ungueltig("Der Bezugsplan gehört nicht zu diesem Standort.");
         if (bezug.Id == plan.Id || Referenzierung.Nachfolger(plaene, plan.Id).Contains(bezug.Id))
@@ -170,6 +152,10 @@ public static class PlanEndpunkte
         plan.BezugsplanId = bezug.Id;
         plan.Bezugsplan = bezug;
         plan.Methode = Referenzierungsmethode.Passpunkte;
+        // Angaben einer früheren Referenzierung mit eigenem Massstab gelten nicht mehr
+        plan.EigenerMassstabDaten = null;
+        db.Messstrecken.RemoveRange(plan.Messstrecken);
+        plan.Messstrecken = [];
         Referenzierung.AusPasspunkten(plan, bezug);
         db.Entry(plan).Property(p => p.Massstab).IsModified = true; // Versionsprüfung erzwingen
 
@@ -256,4 +242,132 @@ public static class PlanEndpunkte
 
     private static bool ImPlan(Plan plan, double u, double v) =>
         u >= 0 && v >= 0 && u <= plan.BildBreite && v <= plan.BildHoehe;
+
+    /// <summary>
+    /// Use Case «Mit eigenem Massstab referenzieren»: für Pläne, die auf keinem Bezugsplan erkennbar sind.
+    /// Massstab über bekannte Strecken im Plan, Lage über einen Ankerpunkt (im Bezugsplan angeklickt
+    /// oder als Koordinate in Metern), Drehung als Winkel oder als Richtung (z.B. Nordpfeile).
+    /// </summary>
+    private static async Task<IResult> EigenerMassstab(
+        int id, EigenerMassstabEingabe eingabe, NetzDbContext db, CancellationToken abbruch)
+    {
+        var plan = await db.Plaene.Include(p => p.Messstrecken).Include(p => p.Passpunkte)
+            .FirstOrDefaultAsync(p => p.Id == id, abbruch);
+        if (plan is null) return Fehler.NichtGefunden("Plan nicht gefunden.");
+        if (plan.IstMasterplan) return Fehler.Ungueltig("Der Masterplan wird über Nullpunkt und Strecken kalibriert.");
+        if (!plan.Aktiv) return Fehler.Ungueltig("Dieser Plan wurde ersetzt und kann nicht mehr referenziert werden.");
+
+        var plaene = await Referenzierung.PlaeneMitLageangaben(db, plan.StandortId, abbruch);
+        var bezug = plaene.FirstOrDefault(p => p.Id == eingabe.BezugsplanId);
+        if (bezug is null) return Fehler.Ungueltig("Der Bezugsplan gehört nicht zu diesem Standort.");
+        if (bezug.Id == plan.Id || Referenzierung.Nachfolger(plaene, plan.Id).Contains(bezug.Id))
+            return Fehler.Ungueltig($"«{bezug.Bezeichnung}» ist selbst auf diesen Plan referenziert und kann nicht Bezugsplan sein.");
+        if (!bezug.Referenziert)
+            return Fehler.Ungueltig($"Der Bezugsplan «{bezug.Bezeichnung}» ist noch nicht referenziert.");
+
+        // Massstab
+        if (eingabe.Strecken is not { Count: 1 or 2 }) return Fehler.Ungueltig("Bitte eine oder zwei bekannte Strecken angeben.");
+        var (strecken, streckenFehler) = StreckenPruefen(plan, eingabe.Strecken);
+        if (streckenFehler is not null) return streckenFehler;
+
+        // Lage
+        if (eingabe.Anker is null) return Fehler.Ungueltig("Bitte den Ankerpunkt im Plan setzen.");
+        if (!ImPlan(plan, eingabe.Anker.U, eingabe.Anker.V)) return Fehler.Ungueltig("Der Ankerpunkt liegt ausserhalb des Plans.");
+        var mitKoordinate = eingabe.AnkerX is not null || eingabe.AnkerY is not null;
+        if (mitKoordinate == (eingabe.AnkerBezug is not null))
+            return Fehler.Ungueltig("Bitte die Lage des Ankerpunkts entweder im Bezugsplan anklicken oder als Koordinate angeben.");
+        Weltpunkt? ankerAbsolut = null;
+        if (mitKoordinate)
+        {
+            if (eingabe.AnkerX is not { } x || eingabe.AnkerY is not { } y || !double.IsFinite(x) || !double.IsFinite(y)
+                || Math.Abs(x) > 100_000 || Math.Abs(y) > 100_000)
+                return Fehler.Ungueltig("Bitte für den Ankerpunkt x und y in Metern angeben (höchstens ±100 000 m).");
+            ankerAbsolut = new Weltpunkt(x, y);
+        }
+        else if (!ImPlan(bezug, eingabe.AnkerBezug!.U, eingabe.AnkerBezug.V))
+            return Fehler.Ungueltig("Der Ankerpunkt liegt ausserhalb des Bezugsplans.");
+
+        // Drehung
+        var mitRichtung = eingabe.RichtungPlan is not null || eingabe.RichtungBezug is not null;
+        if (mitRichtung == (eingabe.Winkel is not null))
+            return Fehler.Ungueltig("Bitte die Drehung entweder als Winkel oder als Richtung angeben.");
+        if (eingabe.Winkel is { } w && (!double.IsFinite(w) || Math.Abs(w) > 360))
+            return Fehler.Ungueltig("Bitte einen Winkel zwischen −360° und 360° angeben.");
+        if (mitRichtung)
+        {
+            if (eingabe.RichtungPlan is not { } rp || eingabe.RichtungBezug is not { } rb)
+                return Fehler.Ungueltig("Bitte die Richtung im Plan und im Bezugsplan angeben.");
+            if (!ImPlan(plan, rp.U1, rp.V1) || !ImPlan(plan, rp.U2, rp.V2))
+                return Fehler.Ungueltig("Die Richtung liegt nicht vollständig im Plan.");
+            if (!ImPlan(bezug, rb.U1, rb.V1) || !ImPlan(bezug, rb.U2, rb.V2))
+                return Fehler.Ungueltig("Die Richtung liegt nicht vollständig im Bezugsplan.");
+            if (Geometrie.Abstand(new(rp.U1, rp.V1), new(rp.U2, rp.V2)) < MinStreckePixel
+                || Geometrie.Abstand(new(rb.U1, rb.V1), new(rb.U2, rb.V2)) < MinStreckePixel)
+                return Fehler.Ungueltig("Die Richtungslinie ist zu kurz. Bitte eine längere Linie wählen.");
+        }
+
+        var daten = new EigenerMassstabDaten(
+            new Planpunkt(eingabe.Anker.U, eingabe.Anker.V),
+            eingabe.AnkerBezug is { } ab ? new Planpunkt(ab.U, ab.V) : null,
+            ankerAbsolut,
+            eingabe.Winkel,
+            eingabe.RichtungPlan is { } r1 ? new Richtungslinie(new(r1.U1, r1.V1), new(r1.U2, r1.V2)) : null,
+            eingabe.RichtungBezug is { } r2 ? new Richtungslinie(new(r2.U1, r2.V1), new(r2.U2, r2.V2)) : null);
+
+        db.Entry(plan).Property(p => p.Version).OriginalValue = eingabe.Version;
+        db.Passpunkte.RemoveRange(plan.Passpunkte);
+        plan.Passpunkte = [];
+        MessstreckenErsetzen(db, plan, strecken);
+        plan.EigenerMassstabDaten = daten.AlsJson();
+        plan.BezugsplanId = bezug.Id;
+        plan.Bezugsplan = bezug;
+        plan.Methode = Referenzierungsmethode.EigenerMassstab;
+        Referenzierung.AusEigenemMassstab(plan, bezug);
+        db.Entry(plan).Property(p => p.Massstab).IsModified = true; // Versionsprüfung erzwingen
+
+        Referenzierung.NachfolgerNeuBerechnen(plaene, plan);
+
+        try
+        {
+            await db.SaveChangesAsync(abbruch);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Fehler.Geaendert();
+        }
+
+        await db.Entry(plan).ReloadAsync(abbruch);
+        return Results.Ok(PlanDto.Aus(plan));
+    }
+
+    /// <summary>Bekannte Strecken prüfen: im Plan, Länge 0–100 000 m, mindestens <see cref="MinStreckePixel"/> lang.</summary>
+    private static (List<BekannteStrecke> Strecken, IResult? Fehler) StreckenPruefen(Plan plan, List<StreckeEingabe> eingabe)
+    {
+        var strecken = new List<BekannteStrecke>();
+        for (var i = 0; i < eingabe.Count; i++)
+        {
+            var s = eingabe[i];
+            var nr = i + 1;
+            if (!ImPlan(plan, s.U1, s.V1) || !ImPlan(plan, s.U2, s.V2))
+                return ([], Fehler.Ungueltig($"Strecke {nr} liegt nicht vollständig im Plan."));
+            if (!(s.LaengeMeter > 0 && s.LaengeMeter <= 100_000))
+                return ([], Fehler.Ungueltig($"Bitte für Strecke {nr} eine Länge zwischen 0 und 100 000 m angeben."));
+            var strecke = new BekannteStrecke(new Planpunkt(s.U1, s.V1), new Planpunkt(s.U2, s.V2), s.LaengeMeter);
+            if (strecke.PixelLaenge < MinStreckePixel)
+                return ([], Fehler.Ungueltig($"Strecke {nr} ist zu kurz. Bitte eine möglichst lange bekannte Strecke wählen."));
+            strecken.Add(strecke);
+        }
+        return (strecken, null);
+    }
+
+    private static void MessstreckenErsetzen(NetzDbContext db, Plan plan, List<BekannteStrecke> strecken)
+    {
+        db.Messstrecken.RemoveRange(plan.Messstrecken);
+        plan.Messstrecken = strecken.Select((s, i) => new Messstrecke
+        {
+            Nummer = i + 1,
+            U1 = s.Anfang.U, V1 = s.Anfang.V, U2 = s.Ende.U, V2 = s.Ende.V,
+            LaengeMeter = s.LaengeMeter
+        }).ToList();
+    }
 }

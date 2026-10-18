@@ -7,7 +7,9 @@ import { naechsteBezeichnung, stockwerkText } from '../format'
 import PlanAnsicht, { type Linie, type Markierung } from '../komponenten/PlanAnsicht.vue'
 import MasterKalibrierung from '../komponenten/MasterKalibrierung.vue'
 import PositionenPanel from '../komponenten/PositionenPanel.vue'
-import PlanReferenzierung, { type ReferenzAnzeige, type Seite } from '../komponenten/PlanReferenzierung.vue'
+import PlanReferenzierung, { type ReferenzAnzeige, type ReferenzWerkzeug, type Seite } from '../komponenten/PlanReferenzierung.vue'
+import PlanEigenerMassstab from '../komponenten/PlanEigenerMassstab.vue'
+import type { Methode } from '../komponenten/MethodenWahl.vue'
 import PlanImport from '../komponenten/PlanImport.vue'
 import PlanEinstellungen from '../komponenten/PlanEinstellungen.vue'
 
@@ -45,7 +47,8 @@ const werkzeugLinien = ref<Linie[]>([])
 const kalibrierKlick = ref(false)
 
 // Referenzierung (zwei Planansichten nebeneinander)
-const referenz = ref<InstanceType<typeof PlanReferenzierung> | null>(null)
+const referenz = ref<ReferenzWerkzeug | null>(null)
+const referenzMethode = ref<Methode>('Passpunkte')
 const refAnzeige = ref<ReferenzAnzeige | null>(null)
 const kontrolleLinks = ref<Punkt | null>(null)
 const kontrolleRechts = ref<Punkt | null>(null)
@@ -103,6 +106,7 @@ async function planLaden() {
     alleStockwerke.value = false
     vorschlag.value = { ...vorschlag.value, bezeichnung: '', stockwerk: neu.stockwerk }
     modus.value = neu.referenziert ? 'ansehen' : neu.istMasterplan ? 'kalibrieren' : 'referenzieren'
+    referenzMethode.value = neu.methode === 'EigenerMassstab' ? 'EigenerMassstab' : 'Passpunkte'
     await positionenLaden()
   } catch (e) {
     ladeFehler.value = (e as Error).message
@@ -174,6 +178,7 @@ async function kalibrierungGespeichert(neu: Plan) {
 /** Kalibrierung (Masterplan) bzw. Referenzierung neu machen */
 function lageAendern() {
   schliessen()
+  if (plan.value) referenzMethode.value = plan.value.methode === 'EigenerMassstab' ? 'EigenerMassstab' : 'Passpunkte'
   modus.value = plan.value?.istMasterplan ? 'kalibrieren' : 'referenzieren'
 }
 
@@ -196,6 +201,12 @@ function referenzAbbrechen() {
     melden(`«${plan.value?.bezeichnung}» ist noch nicht referenziert. Sie finden den Plan in der Planauswahl.`)
     planWechseln(standort.value.masterplan.id)
   }
+}
+
+function methodeWechseln(m: Methode) {
+  refAnzeige.value = null
+  kontrolleLinks.value = kontrolleRechts.value = null
+  referenzMethode.value = m
 }
 
 function kontrolle(links: Punkt | null, rechts: Punkt | null) {
@@ -336,10 +347,14 @@ const markierungen = computed<Markierung[]>(() => {
   if (plan.value?.nullpunkt) liste.unshift({ id: 'nullpunkt', punkt: plan.value.nullpunkt, art: 'nullpunkt', text: '0/0' })
   return liste
 })
-const linien = computed(() => (modus.value === 'kalibrieren' ? werkzeugLinien.value : []))
+const linien = computed(() => {
+  if (modus.value === 'kalibrieren') return werkzeugLinien.value
+  if (modus.value === 'referenzieren') return refAnzeige.value?.linienLinks ?? []
+  return []
+})
 const klickModus = computed(() => {
   if (modus.value === 'kalibrieren') return kalibrierKlick.value
-  if (modus.value === 'referenzieren') return refAnzeige.value?.klick ?? false
+  if (modus.value === 'referenzieren') return refAnzeige.value?.klickLinks ?? false
   return modus.value === 'setzen'
 })
 const werkzeugAktiv = computed(() => modus.value === 'kalibrieren' || modus.value === 'referenzieren')
@@ -435,14 +450,15 @@ watch(alleStockwerke, positionenLaden)
         @klick="klick" @verschoben="verschoben" @markierung-klick="markierungKlick" @zeiger="(p: Punkt | null) => zeiger('links', p)" />
       <template v-if="modus === 'referenzieren'">
         <PlanAnsicht v-if="refAnzeige?.bezug" :key="refAnzeige.bezug.id" :plan="refAnzeige.bezug"
-          :markierungen="refAnzeige.rechts" :linien="refAnzeige.linienRechts" :klick-modus="refAnzeige.klick"
+          :markierungen="refAnzeige.rechts" :linien="refAnzeige.linienRechts" :klick-modus="refAnzeige.klickRechts"
           :kontrollpunkt="kontrolleRechts" :titel="`Bezugsplan: ${refAnzeige.bezug.bezeichnung}`" class="ansicht bezug"
           @klick="(p: Punkt) => referenz?.klick('rechts', p)"
           @verschoben="(id: string, p: Punkt) => referenz?.verschoben('rechts', id, p)"
           @zeiger="(p: Punkt | null) => zeiger('rechts', p)" />
         <div v-else class="ansicht bezug platzhalter leise">Bezugsplan wird geladen …</div>
-        <PlanReferenzierung ref="referenz" :key="plan.id" :plan="plan" :plaene="plaene"
-          @anzeige="(a: ReferenzAnzeige) => (refAnzeige = a)" @kontrolle="kontrolle"
+        <component :is="referenzMethode === 'Passpunkte' ? PlanReferenzierung : PlanEigenerMassstab" ref="referenz"
+          :key="`${plan.id}-${referenzMethode}`" :plan="plan" :plaene="plaene"
+          @anzeige="(a: ReferenzAnzeige) => (refAnzeige = a)" @kontrolle="kontrolle" @methode="methodeWechseln"
           @gespeichert="referenzGespeichert" @abbrechen="referenzAbbrechen" />
       </template>
       <MasterKalibrierung v-else-if="modus === 'kalibrieren'" ref="kalibrierung" :plan="plan" @anzeige="werkzeugAnzeige"
