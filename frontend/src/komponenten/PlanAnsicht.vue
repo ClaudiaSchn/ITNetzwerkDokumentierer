@@ -8,9 +8,15 @@ import { formatZahl, nachAbsolut } from '../geometrie'
 export interface Markierung {
   id: string
   punkt: Punkt
-  art: 'nullpunkt' | 'messpunkt'
+  art: 'nullpunkt' | 'messpunkt' | 'position'
   text?: string
   verschiebbar?: boolean
+  /** Klick auf die Markierung löst `markierungKlick` aus */
+  klickbar?: boolean
+  /** Hervorgehoben (z.B. ausgewählte Position) */
+  aktiv?: boolean
+  /** Noch nicht gespeichert */
+  neu?: boolean
 }
 
 /** Linie zwischen zwei Planpunkten (z.B. Messstrecke). */
@@ -35,6 +41,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   klick: [punkt: Punkt]
   verschoben: [id: string, punkt: Punkt]
+  markierungKlick: [id: string]
 }>()
 
 const container = ref<HTMLDivElement | null>(null)
@@ -66,9 +73,19 @@ const maskiert = (text: string) =>
   text.replace(/[&<>"']/g, (z) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[z]!)
 
 function symbol(m: Markierung) {
+  const text = m.text ? `<span class="beschriftung">${maskiert(m.text)}</span>` : ''
+  const zusatz = `${m.aktiv ? ' aktiv' : ''}${m.neu ? ' neu' : ''}`
+  if (m.art === 'position') {
+    return L.divIcon({
+      className: `markierung markierung-position${zusatz}`,
+      html: `<span class="punkt"></span>${text}`,
+      iconSize: [16, 16],
+      iconAnchor: [8, 8]
+    })
+  }
   return L.divIcon({
-    className: `markierung markierung-${m.art}`,
-    html: `<span class="kreuz"></span>${m.text ? `<span class="beschriftung">${maskiert(m.text)}</span>` : ''}`,
+    className: `markierung markierung-${m.art}${zusatz}`,
+    html: `<span class="kreuz"></span>${text}`,
     iconSize: [28, 28],
     iconAnchor: [14, 14]
   })
@@ -90,10 +107,14 @@ function ebeneZeichnen() {
       icon: symbol(m),
       draggable: !!m.verschiebbar,
       keyboard: false,
-      title: m.verschiebbar ? 'Zum Verschieben ziehen' : ''
+      title: m.verschiebbar ? 'Zum Verschieben ziehen' : m.text ?? '',
+      zIndexOffset: m.aktiv || m.neu ? 1000 : 0
     }).addTo(ebene)
     if (m.verschiebbar) {
       marker.on('dragend', () => emit('verschoben', m.id, nachPunkt(marker.getLatLng())))
+    }
+    if (m.klickbar) {
+      marker.on('click', () => emit('markierungKlick', m.id))
     }
   }
 }
@@ -144,6 +165,14 @@ function einpassen() {
 function welt(p: Punkt) {
   return nachAbsolut(props.plan, p)
 }
+
+/** Plan auf einen Punkt zentrieren, mindestens auf Zoomstufe 0 (1:1) */
+function zentrieren(p: Punkt) {
+  if (!karte) return
+  karte.setView(nachLatLng(p), Math.max(karte.getZoom(), 0))
+}
+
+defineExpose({ zentrieren })
 </script>
 
 <template>
@@ -235,6 +264,34 @@ function welt(p: Punkt) {
 }
 .markierung-messpunkt {
   color: #0969da;
+}
+.markierung-position .punkt {
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: #8250df;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px #8250df;
+}
+.markierung-position .beschriftung {
+  left: 14px;
+  top: -6px;
+  color: #3e1f79;
+}
+.markierung-position.aktiv .punkt {
+  background: #fb8500;
+  box-shadow: 0 0 0 2px #fb8500, 0 0 0 5px rgba(251, 133, 0, 0.3);
+}
+.markierung-position.aktiv .beschriftung {
+  color: #9a4b00;
+}
+.markierung-position.neu .punkt {
+  background: #1a7f37;
+  box-shadow: 0 0 0 2px #1a7f37, 0 0 0 5px rgba(26, 127, 55, 0.3);
+}
+.markierung-position .beschriftung,
+.markierung-position .punkt {
+  cursor: pointer;
 }
 .markierung .beschriftung {
   position: absolute;
