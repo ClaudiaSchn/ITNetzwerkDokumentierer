@@ -19,7 +19,7 @@ public static class StandortEndpunkte
                 .OrderBy(s => s.Name)
                 .Select(s => new StandortDto(s.Id, s.Name,
                     s.Plaene.Where(p => p.IstMasterplan && p.Aktiv)
-                        .Select(p => new PlanKurzDto(p.Id, p.Bezeichnung))
+                        .Select(p => new PlanKurzDto(p.Id, p.Bezeichnung, p.Referenziert))
                         .FirstOrDefault()))
                 .ToListAsync(abbruch));
 
@@ -29,7 +29,7 @@ public static class StandortEndpunkte
                 .Where(s => s.Id == id)
                 .Select(s => new StandortDto(s.Id, s.Name,
                     s.Plaene.Where(p => p.IstMasterplan && p.Aktiv)
-                        .Select(p => new PlanKurzDto(p.Id, p.Bezeichnung))
+                        .Select(p => new PlanKurzDto(p.Id, p.Bezeichnung, p.Referenziert))
                         .FirstOrDefault()))
                 .FirstOrDefaultAsync(abbruch);
             return standort is null ? Fehler.NichtGefunden("Standort nicht gefunden.") : Results.Ok(standort);

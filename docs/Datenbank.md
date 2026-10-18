@@ -15,8 +15,9 @@ Das Schema setzt das Klassendiagramm [`diagramme/kd_01_datenmodell.puml`](diagra
 | Tabelle | Inhalt | Wichtige Spalten |
 | --- | --- | --- |
 | `standorte` | Firmenstandorte | `name` (eindeutig) |
-| `plaene` | Pläne (PDF) mit Referenzierung | `standort_id`, `ist_masterplan`, `methode`, `stockwerk`, `massstab`, `drehung`, `versatz_x/y`, `bezugsplan_id`, `ersetzt_plan_id`, `aktiv`, `pdf_datei`, `bild_datei`, `bild_breite`, `bild_hoehe` |
+| `plaene` | Pläne (PDF) mit Referenzierung | `standort_id`, `ist_masterplan`, `methode`, `stockwerk`, `massstab`, `drehung`, `versatz_x/y`, `bezugsplan_id`, `ersetzt_plan_id`, `aktiv`, `referenziert`, `pdf_datei`, `bild_datei`, `bild_breite`, `bild_hoehe` |
 | `passpunkte` | gespeicherte Passpunkte einer Referenzierung | `plan_id`, `nummer` (1/2), `plan_x/y`, `bezug_x/y` |
+| `messstrecken` | bekannte Strecken der Kalibrierung (Masterplan, eigener Massstab) | `plan_id`, `nummer`, `u1/v1`, `u2/v2`, `laenge_meter` |
 | `positionen` | Rack, Bodendose … | `standort_id`, `positionstyp_id`, `bezeichnung`, `x`, `y`, `stockwerk` |
 | `verbindungen` | «Verbindung existiert» zwischen zwei Positionen | `standort_id`, `position_a_id`, `position_b_id` |
 | `kommentare` | Kommentare an Positionen | `position_id`, `text`, `verfasser`, `status`, `erstellt_am` |
@@ -33,12 +34,16 @@ Abweichung vom Klassendiagramm: `verbindungen` und `medien` tragen zusätzlich `
 
 Beim Import wird die PDF-Seite einmalig in ein PNG umgewandelt (`bild_datei`, längste Kante höchstens 6000 px, höchstens 200 dpi). Planeinheiten (u, v) sind Pixel dieses Bilds, Ursprung oben links, v nach unten. PDF und Bild liegen in der Planablage (Docker-Volume `plan-ablage`).
 
-Umrechnung Planpunkt (u, v) → absolute Koordinate (x, y) in Metern, θ = `drehung` in Grad:
+Absolute Koordinaten (x, y) sind Meter: x nach rechts, y nach oben, (0, 0) = Nullpunkt des Masterplans. Umrechnung Planpunkt (u, v) → (x, y), θ = `drehung` in Grad (Code: `Dienste/Geometrie.cs` und `frontend/src/geometrie.ts`):
 
 ```
-x = versatz_x + massstab · (u · cos θ − v · sin θ)
-y = versatz_y + massstab · (u · sin θ + v · cos θ)
+x = versatz_x + massstab · ( u · cos θ + v · sin θ)
+y = versatz_y + massstab · ( u · sin θ − v · cos θ)
 ```
+
+Das Minuszeichen beim y entsteht, weil v im Bild nach unten zählt, y aber nach oben.
+
+**Kalibrierung des Masterplans:** Aus zwei bekannten Strecken wird der Massstab bestimmt, gewichtet nach Länge (Summe Meter ÷ Summe Pixel), weil längere Strecken genauer sind. Die Abweichung zwischen den Strecken dient als Plausibilitätsprüfung (Hinweis ab 2 %). Der Versatz ergibt sich aus dem Nullpunkt (u₀, v₀): `versatz_x = −massstab · u₀`, `versatz_y = massstab · v₀`. Bis zur Kalibrierung ist `referenziert = false` und die Werte sind Platzhalter.
 
 ## Wo welche Regel gilt
 
@@ -63,9 +68,9 @@ Die Nummern beziehen sich auf die Regeln im [Konzept](Konzept_Phase1.md#regeln).
 | 9 Pro Gerät, Nummer und Seite ein Port | Datenbank | Index auf `ports (geraet_id, nummer, seite)` |
 | 9 Durchgang: Vorne/Hinten, Endgerät: Einzel | Backend | Ports werden aus der Vorlage erzeugt |
 | 10 Löschen nur, wenn nichts mehr daran hängt | Datenbank | Fremdschlüssel mit `ON DELETE RESTRICT` |
-| 12 Gleichzeitige Änderungen | Datenbank + EF Core | `xmin` als Versionsnummer |
+| 12 Gleichzeitige Änderungen | Datenbank + EF Core | `xmin` als Versionsnummer; der Browser schickt die geladene Version mit, bei Abweichung Antwort 409 |
 
-Was beim Löschen automatisch mitgelöscht wird: Kommentare einer Position, Passpunkte eines Plans, Ports eines Geräts, Anschlüsse eines Mediums, Portvorlagen eines Gerätetyps. Alles andere blockiert das Löschen, solange etwas daran hängt.
+Was beim Löschen automatisch mitgelöscht wird: Kommentare einer Position, Passpunkte und Messstrecken eines Plans, Ports eines Geräts, Anschlüsse eines Mediums, Portvorlagen eines Gerätetyps. Alles andere blockiert das Löschen, solange etwas daran hängt.
 
 ## Startwerte
 

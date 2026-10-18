@@ -294,6 +294,64 @@ namespace NetzDoku.Api.Data.Migrationen
                         });
                 });
 
+            modelBuilder.Entity("NetzDoku.Api.Modell.Messstrecke", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<double>("LaengeMeter")
+                        .HasColumnType("double precision")
+                        .HasColumnName("laenge_meter");
+
+                    b.Property<int>("Nummer")
+                        .HasColumnType("integer")
+                        .HasColumnName("nummer");
+
+                    b.Property<int>("PlanId")
+                        .HasColumnType("integer")
+                        .HasColumnName("plan_id");
+
+                    b.Property<double>("U1")
+                        .HasColumnType("double precision")
+                        .HasColumnName("u1");
+
+                    b.Property<double>("U2")
+                        .HasColumnType("double precision")
+                        .HasColumnName("u2");
+
+                    b.Property<double>("V1")
+                        .HasColumnType("double precision")
+                        .HasColumnName("v1");
+
+                    b.Property<double>("V2")
+                        .HasColumnType("double precision")
+                        .HasColumnName("v2");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_messstrecken");
+
+                    b.HasIndex("PlanId", "Nummer")
+                        .IsUnique()
+                        .HasDatabaseName("ix_messstrecken_plan_id_nummer");
+
+                    b.ToTable("messstrecken", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_messstrecken_laenge_positiv", "laenge_meter > 0");
+
+                            t.HasCheckConstraint("ck_messstrecken_nummer_positiv", "nummer >= 1");
+                        });
+                });
+
             modelBuilder.Entity("NetzDoku.Api.Modell.Passpunkt", b =>
                 {
                     b.Property<int>("Id")
@@ -409,6 +467,10 @@ namespace NetzDoku.Api.Data.Migrationen
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("pdf_datei");
+
+                    b.Property<bool>("Referenziert")
+                        .HasColumnType("boolean")
+                        .HasColumnName("referenziert");
 
                     b.Property<int>("StandortId")
                         .HasColumnType("integer")
@@ -858,6 +920,18 @@ namespace NetzDoku.Api.Data.Migrationen
                     b.Navigation("Verbindung");
                 });
 
+            modelBuilder.Entity("NetzDoku.Api.Modell.Messstrecke", b =>
+                {
+                    b.HasOne("NetzDoku.Api.Modell.Plan", "Plan")
+                        .WithMany("Messstrecken")
+                        .HasForeignKey("PlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_messstrecken_plaene_plan_id");
+
+                    b.Navigation("Plan");
+                });
+
             modelBuilder.Entity("NetzDoku.Api.Modell.Passpunkt", b =>
                 {
                     b.HasOne("NetzDoku.Api.Modell.Plan", "Plan")
@@ -1025,6 +1099,8 @@ namespace NetzDoku.Api.Data.Migrationen
 
             modelBuilder.Entity("NetzDoku.Api.Modell.Plan", b =>
                 {
+                    b.Navigation("Messstrecken");
+
                     b.Navigation("Passpunkte");
                 });
 

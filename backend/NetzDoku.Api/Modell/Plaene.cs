@@ -13,13 +13,15 @@ public class Standort : Entitaet
 /// Ein einseitiges PDF (Gelände, Gebäude, Geschoss, Raum), referenziert auf den Masterplan.
 /// </summary>
 /// <remarks>
-/// Umrechnung Planpunkt (u, v) in Planeinheiten → absolute Koordinate (x, y) in Metern,
-/// mit θ = <see cref="Drehung"/> in Grad:
+/// Planeinheiten (u, v) sind Pixel des Planbilds: Ursprung oben links, v nach unten.
+/// Absolute Koordinaten (x, y) sind Meter: x nach rechts, y nach oben, (0, 0) = Nullpunkt
+/// des Masterplans. Umrechnung mit θ = <see cref="Drehung"/> in Grad:
 /// <code>
-/// x = VersatzX + Massstab · (u · cos θ − v · sin θ)
-/// y = VersatzY + Massstab · (u · sin θ + v · cos θ)
+/// x = VersatzX + Massstab · ( u · cos θ + v · sin θ)
+/// y = VersatzY + Massstab · ( u · sin θ − v · cos θ)
 /// </code>
 /// Beim Masterplan ist θ = 0; der Versatz legt den absoluten Nullpunkt fest.
+/// Siehe <see cref="NetzDoku.Api.Dienste.Geometrie"/>.
 /// </remarks>
 public class Plan : Entitaet
 {
@@ -53,6 +55,12 @@ public class Plan : Entitaet
     public double VersatzX { get; set; }
     public double VersatzY { get; set; }
 
+    /// <summary>
+    /// True, sobald Massstab, Drehung und Versatz bestimmt sind (Masterplan kalibriert bzw.
+    /// Plan referenziert). Vorher sind die Werte nur Platzhalter.
+    /// </summary>
+    public bool Referenziert { get; set; }
+
     /// <summary>False, sobald der Plan durch eine neue Version ersetzt wurde.</summary>
     public bool Aktiv { get; set; } = true;
 
@@ -65,6 +73,7 @@ public class Plan : Entitaet
     public Plan? ErsetztPlan { get; set; }
 
     public List<Passpunkt> Passpunkte { get; set; } = [];
+    public List<Messstrecke> Messstrecken { get; set; } = [];
 }
 
 /// <summary>
@@ -85,4 +94,25 @@ public class Passpunkt : Entitaet
     /// <summary>Lage im Bezugsplan (Planeinheiten des Bezugsplans).</summary>
     public double BezugX { get; set; }
     public double BezugY { get; set; }
+}
+
+/// <summary>
+/// Bekannte Strecke im Plan, über die der Massstab bestimmt wurde (Masterplan,
+/// eigener Massstab). Gespeichert, damit die Kalibrierung nachvollziehbar und korrigierbar bleibt.
+/// </summary>
+public class Messstrecke : Entitaet
+{
+    public int PlanId { get; set; }
+    public Plan Plan { get; set; } = null!;
+
+    public int Nummer { get; set; }
+
+    /// <summary>Anfang und Ende in Planeinheiten.</summary>
+    public double U1 { get; set; }
+    public double V1 { get; set; }
+    public double U2 { get; set; }
+    public double V2 { get; set; }
+
+    /// <summary>Bekannte Länge in Metern.</summary>
+    public double LaengeMeter { get; set; }
 }

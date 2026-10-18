@@ -92,6 +92,16 @@ Der erste Start dauert einige Minuten (Images laden, Backend und Frontend bauen)
 
 Das Datenbankpasswort wird beim **allerersten** Start festgelegt. Wer es später ändern will, ändert es in der Datenbank oder löscht – nur solange noch keine echten Daten erfasst sind – mit `docker compose down -v` alles und startet neu.
 
+## Tests
+
+Im Ordner `backend` (benötigt das .NET 10 SDK):
+
+```powershell
+dotnet test
+```
+
+Die Unit-Tests in `NetzDoku.Tests` prüfen die Geometrie (Massstab, Nullpunkt, Umrechnung Plan ↔ Meter). In Visual Studio erscheinen sie im Test-Explorer.
+
 ## Entwickeln ohne Docker (optional)
 
 Für schnelles Arbeiten an einzelnen Teilen:

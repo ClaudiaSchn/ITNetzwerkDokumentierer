@@ -1,28 +1,101 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import L from 'leaflet'
-import type { Plan } from '../api'
+import type { Plan, Punkt } from '../api'
+import { formatZahl, nachAbsolut } from '../geometrie'
 
-const props = defineProps<{ plan: Plan }>()
+/** Punkt-Markierung im Plan (z.B. Nullpunkt, Messpunkt, später Positionen). */
+export interface Markierung {
+  id: string
+  punkt: Punkt
+  art: 'nullpunkt' | 'messpunkt'
+  text?: string
+  verschiebbar?: boolean
+}
+
+/** Linie zwischen zwei Planpunkten (z.B. Messstrecke). */
+export interface Linie {
+  id: string
+  von: Punkt
+  bis: Punkt
+  text?: string
+}
+
+const props = withDefaults(
+  defineProps<{
+    plan: Plan
+    markierungen?: Markierung[]
+    linien?: Linie[]
+    /** Fadenkreuz-Cursor und Klick-Ereignisse aktiv */
+    klickModus?: boolean
+  }>(),
+  { markierungen: () => [], linien: () => [], klickModus: false }
+)
+
+const emit = defineEmits<{
+  klick: [punkt: Punkt]
+  verschoben: [id: string, punkt: Punkt]
+}>()
 
 const container = ref<HTMLDivElement | null>(null)
-const zeiger = ref<{ u: number; v: number } | null>(null)
+const zeiger = ref<Punkt | null>(null)
 let karte: L.Map | null = null
 let bild: L.ImageOverlay | null = null
+// Leaflet merkt Grössenänderungen des Containers nicht selbst (z.B. Seitenleiste ein/aus)
+let groessenBeobachter: ResizeObserver | null = null
+const ebene = L.layerGroup()
 
-// Planeinheiten (u, v) sind Pixel des Planbilds, Ursprung oben links, v nach unten.
+// Planeinheiten (u, v): Pixel des Planbilds, Ursprung oben links, v nach unten.
 // Leaflet (CRS.Simple) zählt y nach oben, deshalb: LatLng(-v, u).
-const nachLatLng = (u: number, v: number) => L.latLng(-v, u)
+const nachLatLng = (p: Punkt) => L.latLng(-p.v, p.u)
+const nachPunkt = (ll: L.LatLng): Punkt => ({ u: ll.lng, v: -ll.lat })
 
 function planZeigen() {
   if (!karte) return
   bild?.remove()
   const { bildBreite: b, bildHoehe: h } = props.plan
-  const grenzen = L.latLngBounds(nachLatLng(0, h), nachLatLng(b, 0))
+  const grenzen = L.latLngBounds(nachLatLng({ u: 0, v: h }), nachLatLng({ u: b, v: 0 }))
   bild = L.imageOverlay(props.plan.bildUrl, grenzen).addTo(karte)
   karte.setMaxBounds(grenzen.pad(0.25))
   karte.fitBounds(grenzen)
   karte.setMinZoom(karte.getZoom() - 1)
+}
+
+// Texte werden als HTML eingefügt → immer maskieren (später stehen hier Benutzereingaben)
+const maskiert = (text: string) =>
+  text.replace(/[&<>"']/g, (z) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[z]!)
+
+function symbol(m: Markierung) {
+  return L.divIcon({
+    className: `markierung markierung-${m.art}`,
+    html: `<span class="kreuz"></span>${m.text ? `<span class="beschriftung">${maskiert(m.text)}</span>` : ''}`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14]
+  })
+}
+
+function ebeneZeichnen() {
+  ebene.clearLayers()
+  for (const l of props.linien) {
+    const linie = L.polyline([nachLatLng(l.von), nachLatLng(l.bis)], {
+      color: '#0969da',
+      weight: 2,
+      dashArray: '6 4',
+      interactive: false
+    }).addTo(ebene)
+    if (l.text) linie.bindTooltip(l.text, { permanent: true, direction: 'center', className: 'linien-text' })
+  }
+  for (const m of props.markierungen) {
+    const marker = L.marker(nachLatLng(m.punkt), {
+      icon: symbol(m),
+      draggable: !!m.verschiebbar,
+      keyboard: false,
+      title: m.verschiebbar ? 'Zum Verschieben ziehen' : ''
+    }).addTo(ebene)
+    if (m.verschiebbar) {
+      marker.on('dragend', () => emit('verschoben', m.id, nachPunkt(marker.getLatLng())))
+    }
+  }
 }
 
 onMounted(() => {
@@ -36,19 +109,30 @@ onMounted(() => {
     wheelPxPerZoomLevel: 120, // feinere Schritte mit dem Mausrad
     attributionControl: false
   })
+  ebene.addTo(karte)
   karte.on('mousemove', (e: L.LeafletMouseEvent) => {
+    const p = nachPunkt(e.latlng)
     const { bildBreite: b, bildHoehe: h } = props.plan
-    const u = Math.round(e.latlng.lng)
-    const v = Math.round(-e.latlng.lat)
-    zeiger.value = u >= 0 && v >= 0 && u <= b && v <= h ? { u, v } : null
+    zeiger.value = p.u >= 0 && p.v >= 0 && p.u <= b && p.v <= h ? p : null
   })
   karte.on('mouseout', () => (zeiger.value = null))
+  karte.on('click', (e: L.LeafletMouseEvent) => {
+    if (!props.klickModus) return
+    const p = nachPunkt(e.latlng)
+    const { bildBreite: b, bildHoehe: h } = props.plan
+    if (p.u >= 0 && p.v >= 0 && p.u <= b && p.v <= h) emit('klick', p)
+  })
   planZeigen()
+  ebeneZeichnen()
+  groessenBeobachter = new ResizeObserver(() => karte?.invalidateSize({ pan: false }))
+  groessenBeobachter.observe(container.value)
 })
 
 watch(() => props.plan.id, planZeigen)
+watch(() => [props.markierungen, props.linien], ebeneZeichnen, { deep: true })
 
 onBeforeUnmount(() => {
+  groessenBeobachter?.disconnect()
   karte?.remove()
   karte = null
 })
@@ -56,16 +140,26 @@ onBeforeUnmount(() => {
 function einpassen() {
   if (bild && karte) karte.fitBounds(bild.getBounds())
 }
+
+function welt(p: Punkt) {
+  return nachAbsolut(props.plan, p)
+}
 </script>
 
 <template>
-  <div class="rahmen">
+  <div class="rahmen" :class="{ 'klick-modus': klickModus }">
     <div ref="container" class="karte-flaeche"></div>
     <button type="button" class="zweitrangig einpassen" title="Ganzen Plan anzeigen" @click="einpassen">
       Ganzer Plan
     </button>
     <div class="koordinaten" aria-live="off">
-      <template v-if="zeiger">u {{ zeiger.u }} · v {{ zeiger.v }} px</template>
+      <template v-if="zeiger">
+        <template v-if="plan.referenziert">
+          x {{ formatZahl(welt(zeiger).x) }} m · y {{ formatZahl(welt(zeiger).y) }} m
+          <span class="px">(u {{ Math.round(zeiger.u) }} · v {{ Math.round(zeiger.v) }} px)</span>
+        </template>
+        <template v-else>u {{ Math.round(zeiger.u) }} · v {{ Math.round(zeiger.v) }} px</template>
+      </template>
       <template v-else>Mausrad: zoomen · Ziehen: verschieben</template>
     </div>
   </div>
@@ -79,6 +173,9 @@ function einpassen() {
   position: absolute;
   inset: 0;
   background: #e9ecef;
+}
+.klick-modus .karte-flaeche {
+  cursor: crosshair;
 }
 .einpassen {
   position: absolute;
@@ -98,6 +195,68 @@ function einpassen() {
   padding: 0.25rem 0.6rem;
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.px {
   color: var(--text-leise);
+  margin-left: 0.25rem;
+}
+</style>
+
+<style>
+/* Leaflet-Symbole (nicht scoped, da Leaflet sie ausserhalb der Komponente erzeugt) */
+.leaflet-container.leaflet-grab {
+  cursor: inherit;
+}
+.markierung .kreuz {
+  position: absolute;
+  inset: 0;
+}
+.markierung .kreuz::before,
+.markierung .kreuz::after {
+  content: '';
+  position: absolute;
+  background: currentColor;
+}
+.markierung .kreuz::before {
+  left: 13px;
+  top: 0;
+  width: 2px;
+  height: 28px;
+}
+.markierung .kreuz::after {
+  top: 13px;
+  left: 0;
+  height: 2px;
+  width: 28px;
+}
+.markierung-nullpunkt {
+  color: #cf222e;
+}
+.markierung-messpunkt {
+  color: #0969da;
+}
+.markierung .beschriftung {
+  position: absolute;
+  left: 18px;
+  top: -14px;
+  white-space: nowrap;
+  font: 600 12px/1 system-ui, sans-serif;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.leaflet-marker-draggable {
+  cursor: move;
+}
+.linien-text {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #0969da;
+  color: #0550ae;
+  font-weight: 600;
+  box-shadow: none;
+}
+.linien-text::before {
+  display: none;
 }
 </style>
