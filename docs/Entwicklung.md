@@ -88,6 +88,7 @@ Der erste Start dauert einige Minuten (Images laden, Backend und Frontend bauen)
 | Login wird immer abgelehnt | Hash nicht in einfachen Anführungszeichen, oder Hash unvollständig kopiert |
 | Statusseite: «Backend nicht erreichbar» | `docker compose logs backend` prüfen |
 | Datenbank «nicht erreichbar» | `docker compose logs db`; wurde `POSTGRES_PASSWORD` nach dem ersten Start geändert, gilt das alte Passwort weiter (siehe unten) |
+| Im Backend-Protokoll beim **allerersten** Start: `fail: … relation "__EFMigrationsHistory" does not exist` | Harmlos: EF Core prüft die Migrationstabelle, bevor sie angelegt ist. Danach läuft die Migration normal durch. |
 
 Das Datenbankpasswort wird beim **allerersten** Start festgelegt. Wer es später ändern will, ändert es in der Datenbank oder löscht – nur solange noch keine echten Daten erfasst sind – mit `docker compose down -v` alles und startet neu.
 
