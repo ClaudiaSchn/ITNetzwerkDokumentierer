@@ -3,6 +3,30 @@
 export interface PlanKurz {
   id: number
   bezeichnung: string
+  referenziert: boolean
+}
+
+export interface Punkt {
+  u: number
+  v: number
+}
+
+export interface Messstrecke {
+  nummer: number
+  u1: number
+  v1: number
+  u2: number
+  v2: number
+  laengeMeter: number
+  massstab: number
+}
+
+export interface StreckeEingabe {
+  u1: number
+  v1: number
+  u2: number
+  v2: number
+  laengeMeter: number
 }
 
 export interface Standort {
@@ -13,6 +37,7 @@ export interface Standort {
 
 export interface Plan {
   id: number
+  version: number
   standortId: number
   bezeichnung: string
   stockwerk: number
@@ -22,6 +47,14 @@ export interface Plan {
   bildHoehe: number
   bildUrl: string
   pdfUrl: string
+  referenziert: boolean
+  massstab: number
+  drehung: number
+  versatzX: number
+  versatzY: number
+  nullpunkt: Punkt | null
+  messstrecken: Messstrecke[]
+  abweichungProzent: number | null
 }
 
 export interface Status {
@@ -79,5 +112,12 @@ export const api = {
     return anfrage<Plan>(`/api/standorte/${standortId}/masterplan`, { method: 'POST', body: formular })
   },
 
-  plan: (id: number) => anfrage<Plan>(`/api/plaene/${id}`)
+  plan: (id: number) => anfrage<Plan>(`/api/plaene/${id}`),
+
+  masterplanKalibrieren: (planId: number, version: number, nullpunkt: Punkt, strecken: StreckeEingabe[]) =>
+    anfrage<Plan>(`/api/plaene/${planId}/kalibrierung`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version, nullpunkt, strecken })
+    })
 }

@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { api, type Plan, type Standort } from '../api'
-import PlanAnsicht from '../komponenten/PlanAnsicht.vue'
+import { computed, ref, watch } from 'vue'
+import { api, type Plan, type Punkt, type Standort } from '../api'
+import { formatMassstab, formatZahl } from '../geometrie'
+import PlanAnsicht, { type Linie, type Markierung } from '../komponenten/PlanAnsicht.vue'
+import MasterKalibrierung from '../komponenten/MasterKalibrierung.vue'
 
 const props = defineProps<{ id: number }>()
 
@@ -15,6 +17,14 @@ const bezeichnung = ref('')
 const laedtHoch = ref(false)
 const uploadFehler = ref<string | null>(null)
 
+// Kalibrierung
+const kalibrieren = ref(false)
+const kalibrierung = ref<InstanceType<typeof MasterKalibrierung> | null>(null)
+const werkzeugMarkierungen = ref<Markierung[]>([])
+const werkzeugLinien = ref<Linie[]>([])
+const klickModus = ref(false)
+const meldung = ref<string | null>(null)
+
 async function laden() {
   laedt.value = true
   ladeFehler.value = null
@@ -22,6 +32,7 @@ async function laden() {
   try {
     standort.value = await api.standort(props.id)
     if (standort.value.masterplan) plan.value = await api.plan(standort.value.masterplan.id)
+    kalibrieren.value = !!plan.value && !plan.value.referenziert
   } catch (e) {
     ladeFehler.value = (e as Error).message
   } finally {
@@ -49,13 +60,41 @@ async function hochladen() {
   laedtHoch.value = true
   try {
     plan.value = await api.masterplanImportieren(props.id, datei.value, bezeichnung.value)
-    if (standort.value) standort.value.masterplan = { id: plan.value.id, bezeichnung: plan.value.bezeichnung }
+    if (standort.value)
+      standort.value.masterplan = { id: plan.value.id, bezeichnung: plan.value.bezeichnung, referenziert: false }
+    kalibrieren.value = true
   } catch (e) {
     uploadFehler.value = (e as Error).message
   } finally {
     laedtHoch.value = false
   }
 }
+
+function werkzeugAnzeige(m: Markierung[], l: Linie[], klick: boolean) {
+  werkzeugMarkierungen.value = m
+  werkzeugLinien.value = l
+  klickModus.value = klick
+}
+
+function kalibrierungGespeichert(neu: Plan) {
+  plan.value = neu
+  kalibrieren.value = false
+  klickModus.value = false
+  meldung.value = `Masterplan kalibriert: ${formatMassstab(neu.massstab)}`
+  setTimeout(() => (meldung.value = null), 5000)
+}
+
+// Ausserhalb der Kalibrierung: Nullpunkt dezent anzeigen
+const markierungen = computed<Markierung[]>(() => {
+  if (kalibrieren.value) return werkzeugMarkierungen.value
+  return plan.value?.nullpunkt
+    ? [{ id: 'nullpunkt', punkt: plan.value.nullpunkt, art: 'nullpunkt', text: '0/0' }]
+    : []
+})
+const linien = computed(() => (kalibrieren.value ? werkzeugLinien.value : []))
+
+const klick = (p: Punkt) => kalibrierung.value?.klick(p)
+const verschoben = (id: string, p: Punkt) => kalibrierung.value?.verschoben(id, p)
 
 watch(() => props.id, laden, { immediate: true })
 </script>
@@ -72,10 +111,25 @@ watch(() => props.id, laden, { immediate: true })
     <div class="leiste">
       <RouterLink to="/" class="zurueck">← Standorte</RouterLink>
       <strong>{{ standort.name }}</strong>
-      <span class="leise">Masterplan: {{ plan.bezeichnung }} · {{ plan.bildBreite }} × {{ plan.bildHoehe }} px</span>
-      <a :href="plan.pdfUrl" class="pdf">Original-PDF</a>
+      <span class="leise">Masterplan: {{ plan.bezeichnung }}</span>
+      <span v-if="plan.referenziert" class="kalibriert" :title="plan.abweichungProzent !== null
+        ? `Abweichung zwischen den Strecken: ${formatZahl(plan.abweichungProzent, 1)} %` : ''">
+        ✓ kalibriert · {{ formatMassstab(plan.massstab) }}
+      </span>
+      <span v-else class="offen">nicht kalibriert</span>
+      <span class="rechts">
+        <button v-if="plan.referenziert && !kalibrieren" type="button" class="zweitrangig klein-btn"
+          @click="kalibrieren = true">Kalibrierung ändern</button>
+        <a :href="plan.pdfUrl">Original-PDF</a>
+      </span>
     </div>
-    <PlanAnsicht :plan="plan" class="ansicht" />
+    <p v-if="meldung" class="meldung" role="status">{{ meldung }}</p>
+    <div class="arbeitsflaeche">
+      <PlanAnsicht :plan="plan" :markierungen="markierungen" :linien="linien" :klick-modus="kalibrieren && klickModus"
+        class="ansicht" @klick="klick" @verschoben="verschoben" />
+      <MasterKalibrierung v-if="kalibrieren" ref="kalibrierung" :plan="plan" @anzeige="werkzeugAnzeige"
+        @gespeichert="kalibrierungGespeichert" @abbrechen="kalibrieren = false" />
+    </div>
   </div>
 
   <!-- Noch kein Masterplan: Import -->
@@ -112,23 +166,53 @@ watch(() => props.id, laden, { immediate: true })
 }
 .leiste {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
-  padding: 0.6rem 1rem;
+  padding: 0.5rem 1rem;
   background: var(--flaeche);
   border-bottom: 1px solid var(--rand);
 }
 .zurueck,
-.pdf {
+.rechts a {
   text-decoration: none;
 }
-.pdf {
+.kalibriert {
+  color: var(--gut);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.offen {
+  color: #9a6700;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.rechts {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.klein-btn {
+  padding: 0.2rem 0.7rem;
+  font-size: 0.85rem;
+}
+.meldung {
+  margin: 0;
+  padding: 0.45rem 1rem;
+  background: #dafbe1;
+  border-bottom: 1px solid #4ac26b;
+  color: #116329;
+  font-size: 0.9rem;
+}
+.arbeitsflaeche {
+  flex: 1;
+  min-height: 0;
+  display: flex;
 }
 .ansicht {
   flex: 1;
-  min-height: 0;
+  min-width: 0;
 }
 .zurueck-link {
   display: inline-block;

@@ -15,6 +15,7 @@ public class NetzDbContext(DbContextOptions<NetzDbContext> optionen) : DbContext
     public DbSet<Standort> Standorte => Set<Standort>();
     public DbSet<Plan> Plaene => Set<Plan>();
     public DbSet<Passpunkt> Passpunkte => Set<Passpunkt>();
+    public DbSet<Messstrecke> Messstrecken => Set<Messstrecke>();
 
     // Topologie
     public DbSet<Position> Positionen => Set<Position>();
@@ -101,6 +102,18 @@ public class NetzDbContext(DbContextOptions<NetzDbContext> optionen) : DbContext
                     "ist_masterplan OR bezugsplan_id IS NOT NULL");
                 t.HasCheckConstraint("ck_plaene_nicht_auf_sich_selbst",
                     "bezugsplan_id <> id AND ersetzt_plan_id <> id");
+            });
+        });
+
+        modell.Entity<Messstrecke>(e =>
+        {
+            e.HasOne(m => m.Plan).WithMany(p => p.Messstrecken)
+                .HasForeignKey(m => m.PlanId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(m => new { m.PlanId, m.Nummer }).IsUnique();
+            e.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_messstrecken_nummer_positiv", "nummer >= 1");
+                t.HasCheckConstraint("ck_messstrecken_laenge_positiv", "laenge_meter > 0");
             });
         });
 

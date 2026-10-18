@@ -57,7 +57,10 @@ onMounted(laden)
       <li v-for="s in standorte" :key="s.id">
         <RouterLink :to="{ name: 'standort', params: { id: s.id } }" class="karte eintrag">
           <span class="name">{{ s.name }}</span>
-          <span v-if="s.masterplan" class="leise">Masterplan: {{ s.masterplan.bezeichnung }}</span>
+          <span v-if="s.masterplan" class="leise">
+            Masterplan: {{ s.masterplan.bezeichnung }}
+            <span v-if="!s.masterplan.referenziert" class="hinweis">· nicht kalibriert</span>
+          </span>
           <span v-else class="hinweis">Noch kein Masterplan</span>
         </RouterLink>
       </li>

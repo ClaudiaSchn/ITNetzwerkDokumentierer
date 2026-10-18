@@ -24,7 +24,7 @@ ITNetzwerkDokumentierer/
 2. **Docker Desktop** von https://www.docker.com/products/docker-desktop/ installieren, bei der Installation «Use WSL 2» aktiviert lassen. Docker Desktop starten und warten, bis unten links «Engine running» steht.
 3. **Git für Windows** von https://git-scm.com/download/win, falls noch nicht vorhanden.
 
-Hinweis zur Lizenz: Docker Desktop ist für private Nutzung und kleine Unternehmen (unter 250 Mitarbeitende **und** unter 10 Mio. USD Umsatz) kostenlos, sonst kostenpflichtig. Alternativen ohne Lizenzkosten sind **Rancher Desktop** (Open Source, gleiche Befehle) oder Docker Engine direkt in WSL. Auf der Linux-VM für den Betrieb wird ohnehin die freie Docker Engine verwendet.
+Hinweis zur Lizenz: Docker Desktop ist für private Nutzung und kleine Unternehmen (unter 250 Mitarbeitende **und** unter 10 Mio. USD Umsatz) kostenlos, sonst kostenpflichtig. Alternativen ohne Lizenzkosten sind **Rancher Desktop** (Open Source, gleiche Befehle; bei der Einrichtung Kubernetes ausschalten und als Engine «dockerd (moby)» wählen) oder Docker Engine direkt in WSL. Auf der Linux-VM für den Betrieb wird ohnehin die freie Docker Engine verwendet.
 
 ## 2. Projekt holen
 
@@ -92,11 +92,21 @@ Der erste Start dauert einige Minuten (Images laden, Backend und Frontend bauen)
 
 Das Datenbankpasswort wird beim **allerersten** Start festgelegt. Wer es später ändern will, ändert es in der Datenbank oder löscht – nur solange noch keine echten Daten erfasst sind – mit `docker compose down -v` alles und startet neu.
 
+## Tests
+
+Im Ordner `backend` (benötigt das .NET 10 SDK):
+
+```powershell
+dotnet test
+```
+
+Die Unit-Tests in `NetzDoku.Tests` prüfen die Geometrie (Massstab, Nullpunkt, Umrechnung Plan ↔ Meter). In Visual Studio erscheinen sie im Test-Explorer.
+
 ## Entwickeln ohne Docker (optional)
 
 Für schnelles Arbeiten an einzelnen Teilen:
 
-- **Backend**: `backend/NetzDoku.slnx` in Visual Studio 2022 (ab 17.14) oder VS Code öffnen und starten; es lauscht auf http://localhost:5080. Benötigt das .NET 10 SDK und eine erreichbare PostgreSQL-Datenbank (Verbindung in `appsettings.Development.json`).
+- **Backend**: `backend/NetzDoku.slnx` in Visual Studio 2026 oder VS Code (Erweiterung «C#») öffnen und starten – Visual Studio 2022 unterstützt .NET 10 offiziell nicht; es lauscht auf http://localhost:5080. Benötigt das .NET 10 SDK und eine erreichbare PostgreSQL-Datenbank (Verbindung in `appsettings.Development.json`).
 - **Frontend**: Node.js 22 installieren, dann im Ordner `frontend`:
   ```powershell
   npm install
