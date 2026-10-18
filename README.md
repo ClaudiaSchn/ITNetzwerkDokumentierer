@@ -7,6 +7,7 @@ Webanwendung zur Erfassung von IT-Netzwerken anhand von Plänen: Positionen, Ver
 
 - [Konzept Phase 1](docs/Konzept_Phase1.md) – Ziele, Begriffe, Use Cases, Datenmodell, Architektur
 - [Diagramme](docs/diagramme/) – UML als PlantUML-Quelle (`.puml`) und PDF
+- [Entwicklung und Test unter Windows](docs/Entwicklung.md) – Docker einrichten, Projekt starten
 
 | Datei | Inhalt |
 | --- | --- |
@@ -18,6 +19,17 @@ Webanwendung zur Erfassung von IT-Netzwerken anhand von Plänen: Positionen, Ver
 | `kd_01_datenmodell` | Klassendiagramm Datenmodell |
 | `kp_01_komponenten` | Komponenten und Betrieb |
 
-## Technik (geplant)
+## Technik
 
-ASP.NET Core (C#) · PostgreSQL · Vue 3 + TypeScript + Leaflet · Caddy · Docker Compose
+ASP.NET Core (C#, .NET 10) · PostgreSQL · Vue 3 + TypeScript (Leaflet folgt) · Caddy · Docker Compose
+
+## Starten
+
+Kurzfassung (Details und Windows-Einrichtung: [docs/Entwicklung.md](docs/Entwicklung.md)):
+
+```
+copy .env.example .env      # Passwörter eintragen
+docker compose up -d --build
+```
+
+Dann https://localhost öffnen.
