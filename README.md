@@ -8,6 +8,7 @@ Webanwendung zur Erfassung von IT-Netzwerken anhand von Plänen: Positionen, Ver
 - [Konzept Phase 1](docs/Konzept_Phase1.md) – Ziele, Begriffe, Use Cases, Datenmodell, Architektur
 - [Diagramme](docs/diagramme/) – UML als PlantUML-Quelle (`.puml`) und PDF
 - [Entwicklung und Test unter Windows](docs/Entwicklung.md) – Docker einrichten, Projekt starten
+- [Datenbank](docs/Datenbank.md) – Tabellen, Regeln, Startwerte, Schema ändern
 
 | Datei | Inhalt |
 | --- | --- |
