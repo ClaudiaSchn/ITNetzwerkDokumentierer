@@ -22,6 +22,7 @@ public class Position : Entitaet
     public int Stockwerk { get; set; }
 
     public List<Geraet> Geraete { get; set; } = [];
+    public List<Patchung> Patchungen { get; set; } = [];
     public List<Kommentar> Kommentare { get; set; } = [];
 }
 

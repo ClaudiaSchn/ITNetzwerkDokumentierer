@@ -41,6 +41,7 @@ Diese Begriffe gelten verbindlich in Konzept, Datenbank und Code.
 | Port | Anschlussstelle eines Geräts mit Portart (RJ45, LC, SC, SFP …), automatischer Nummer und freier Bezeichnung. |
 | Medium | Kabel oder Funkstrecke auf einer Verbindung (LWL Singlemode, LWL Multimode, Cu, Richtfunk) mit Kabelnummer. |
 | Anschluss | Ein Ende einer Ader/Faser eines Mediums. Ein Medium mit n Fasern hat 2 × n Anschlüsse. |
+| Patchung | Patchkabel zwischen zwei Ports derselben Position (z.B. Patchpanel vorne → Switch). |
 
 ## Use Cases
 
@@ -82,6 +83,7 @@ Phase 1 umfasst fünf Bereiche und zwei Akteure. Der **IT-Mitarbeiter** erfasst 
 | Gerät platzieren / entfernen | An einer Position; Ports werden aus der Vorlage erzeugt. Lage im Rack (Höheneinheit) vorerst nicht erfasst. |
 | Medium zuweisen / entfernen | Zu einer Verbindung, mit Medientyp, Kabelnummer (eindeutig pro Standort) und Anzahl Anschlüsse pro Ende. |
 | Medium anschliessen / Anschluss lösen | Je Anschluss ein Port an der jeweiligen End-Position. Geprüft wird: Port frei, Portart für den Medientyp erlaubt. |
+| Patchen / Patchung entfernen | Zwei freie Ports derselben Position verbinden, mit optionaler Beschriftung. Ein Port ist entweder an ein Medium angeschlossen oder gepatcht. |
 
 ### Auswertung und vor Ort
 
@@ -112,6 +114,7 @@ Positionen hängen am Standort, nicht am Plan: Sie speichern nur ihre absolute K
 | Port | nummer, seite (EINZEL/VORNE/HINTEN), bezeichnung | gehört zu Gerät; hat Portart |
 | Medium | kabelnummer, anzahlAnschluesse | gehört zu Verbindung; hat Medientyp, Anschlüsse |
 | Anschluss | ende (A/B), nummer | gehört zu Medium; belegt höchstens einen Port |
+| Patchung | bezeichnung | an Position; verbindet genau zwei Ports |
 | Gerätetyp | name, kategorie (Durchgang/Endgerät) | hat Portvorlagen |
 | Portvorlage | nummer, seite | gehört zu Gerätetyp; hat Portart |
 | Positionstyp, Portart | name | Stammdaten |
@@ -129,6 +132,7 @@ Positionen hängen am Standort, nicht am Plan: Sie speichern nur ihre absolute K
 8. Die Portart muss für den Medientyp erlaubt sein. Ein Port ist mit höchstens einem Anschluss belegt.
 9. Durchgangsgerät: pro Nummer ein Port VORNE und einer HINTEN, intern durchverbunden. Endgerät: Ports EINZEL.
 10. Position, Gerät und Medium sind nur löschbar, wenn nichts mehr daran hängt bzw. belegt ist.
+11. Eine Patchung verbindet zwei verschiedene Ports derselben Position. Ein Port ist höchstens einmal belegt – entweder durch einen Anschluss oder durch eine Patchung.
 
 ![Klassendiagramm Datenmodell Phase 1](diagramme/kd_01_datenmodell.png)
 

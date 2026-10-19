@@ -35,6 +35,37 @@ public class Port : Entitaet
 
     /// <summary>Der Anschluss, der diesen Port belegt (höchstens einer).</summary>
     public Anschluss? Anschluss { get; set; }
+
+    /// <summary>Ende einer Patchung an diesem Port (höchstens eines). Ein Port ist entweder angeschlossen oder gepatcht.</summary>
+    public Patchende? Patchende { get; set; }
+}
+
+/// <summary>
+/// Patchkabel zwischen zwei Ports an derselben Position, z.B. Patchpanel vorne → Switch.
+/// Die beiden Enden stehen in <see cref="Enden"/>; ein Port kommt dort höchstens einmal vor.
+/// </summary>
+public class Patchung : Entitaet
+{
+    public int PositionId { get; set; }
+    public Position Position { get; set; } = null!;
+
+    /// <summary>Optionale Beschriftung des Patchkabels.</summary>
+    public string? Bezeichnung { get; set; }
+
+    public List<Patchende> Enden { get; set; } = [];
+}
+
+/// <summary>Ein Ende einer Patchung: belegt genau einen Port.</summary>
+public class Patchende
+{
+    public int PatchungId { get; set; }
+    public Patchung Patchung { get; set; } = null!;
+
+    /// <summary>1 oder 2.</summary>
+    public int Nummer { get; set; }
+
+    public int PortId { get; set; }
+    public Port Port { get; set; } = null!;
 }
 
 /// <summary>Kabel oder Funkstrecke auf einer Verbindung.</summary>

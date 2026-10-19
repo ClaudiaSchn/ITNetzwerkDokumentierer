@@ -70,5 +70,6 @@ app.MapVerbindungEndpunkte();
 app.MapMedienEndpunkte();
 app.MapGeraetEndpunkte();
 app.MapAnschlussEndpunkte();
+app.MapPatchungEndpunkte();
 
 app.Run();

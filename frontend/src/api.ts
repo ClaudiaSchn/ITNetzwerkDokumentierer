@@ -214,6 +214,17 @@ export interface Belegung {
   medientyp: string
 }
 
+/** Patchung an einem Port: Partner-Port und Beschriftung des Patchkabels */
+export interface PatchInfo {
+  patchungId: number
+  version: number
+  partnerGeraetId: number
+  partnerGeraet: string
+  partnerNummer: number
+  partnerSeite: 'Einzel' | 'Vorne' | 'Hinten'
+  bezeichnung: string | null
+}
+
 export interface Port {
   id: number
   version: number
@@ -223,6 +234,45 @@ export interface Port {
   portart: string
   bezeichnung: string | null
   belegung: Belegung | null
+  patch: PatchInfo | null
+}
+
+/** Port kurz, z.B. als Ende einer Patchung */
+export interface PortKurz {
+  portId: number
+  geraetId: number
+  geraet: string
+  nummer: number
+  seite: Port['seite']
+  bezeichnung: string | null
+  portart: string
+}
+
+/** Patchkabel zwischen zwei Ports derselben Position */
+export interface Patchung {
+  id: number
+  version: number
+  positionId: number
+  bezeichnung: string | null
+  port1: PortKurz
+  port2: PortKurz
+}
+
+/** Port an einer Position; belegt = Text zur Belegung (Kabel oder Patchung), sonst null */
+export interface Positionsport {
+  id: number
+  nummer: number
+  seite: Port['seite']
+  bezeichnung: string | null
+  portart: string
+  belegt: string | null
+}
+
+export interface Positionsgeraet {
+  id: number
+  bezeichnung: string
+  kategorie: Geraetekategorie
+  ports: Positionsport[]
 }
 
 export interface GeraetDetail {
@@ -511,6 +561,27 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(angaben)
     }),
+
+  patchungen: (positionId: number) => anfrage<Patchung[]>(`/api/positionen/${positionId}/patchungen`),
+
+  positionsports: (positionId: number) => anfrage<Positionsgeraet[]>(`/api/positionen/${positionId}/ports`),
+
+  patchungAnlegen: (positionId: number, port1Id: number, port2Id: number, bezeichnung: string) =>
+    anfrage<Patchung>(`/api/positionen/${positionId}/patchungen`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port1Id, port2Id, bezeichnung })
+    }),
+
+  patchungAendern: (id: number, version: number, bezeichnung: string) =>
+    anfrage<Patchung>(`/api/patchungen/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version, bezeichnung })
+    }),
+
+  patchungLoeschen: (id: number, version: number) =>
+    anfrage<void>(`/api/patchungen/${id}?version=${version}`, { method: 'DELETE' }),
 
   portsBeschriften: (geraetId: number, ports: { id: number; version: number; bezeichnung: string | null }[]) =>
     anfrage<GeraetDetail>(`/api/geraete/${geraetId}/portbezeichnungen`, {

@@ -20,8 +20,12 @@ public record GeraetDto(
 /// <summary>Belegung eines Ports: welches Medium, welches Ende, welche Faser/Ader.</summary>
 public record BelegungDto(int MediumId, string Kabelnummer, string Ende, int Nummer, string Medientyp);
 
+/// <summary>Patchung an einem Port: Partner-Port (Gerät, Nummer, Seite) und Beschriftung des Patchkabels.</summary>
+public record PatchDto(int PatchungId, uint Version, int PartnerGeraetId, string PartnerGeraet, int PartnerNummer, string PartnerSeite, string? Bezeichnung);
+
 public record PortDto(
-    int Id, uint Version, int Nummer, string Seite, int PortartId, string Portart, string? Bezeichnung, BelegungDto? Belegung);
+    int Id, uint Version, int Nummer, string Seite, int PortartId, string Portart, string? Bezeichnung, BelegungDto? Belegung,
+    PatchDto? Patch);
 
 public record GeraetDetailDto(GeraetDto Geraet, string Position, IReadOnlyList<PortDto> Ports);
 
@@ -147,13 +151,23 @@ public static class GeraetEndpunkte
                 {
                     p.Anschluss.MediumId, p.Anschluss.Medium.Kabelnummer, p.Anschluss.Ende, p.Anschluss.Nummer,
                     Medientyp = p.Anschluss.Medium.Medientyp.Name
+                },
+                Patch = p.Patchende == null ? null : new
+                {
+                    p.Patchende.PatchungId, p.Patchende.Patchung.Version, p.Patchende.Patchung.Bezeichnung,
+                    Partner = p.Patchende.Patchung.Enden.Where(x => x.PortId != p.Id)
+                        .Select(x => new { x.Port.GeraetId, Geraet = x.Port.Geraet.Bezeichnung, x.Port.Nummer, x.Port.Seite })
+                        .FirstOrDefault()
                 }
             })
             .ToListAsync(abbruch);
         return Results.Ok(new GeraetDetailDto(geraet, position, ports.Select(p => new PortDto(
             p.Id, p.Version, p.Nummer, p.Seite.ToString(), p.PortartId, p.Portart, p.Bezeichnung,
             p.Anschluss is null ? null
-                : new BelegungDto(p.Anschluss.MediumId, p.Anschluss.Kabelnummer, p.Anschluss.Ende.ToString(), p.Anschluss.Nummer, p.Anschluss.Medientyp)))
+                : new BelegungDto(p.Anschluss.MediumId, p.Anschluss.Kabelnummer, p.Anschluss.Ende.ToString(), p.Anschluss.Nummer, p.Anschluss.Medientyp),
+            p.Patch?.Partner is null ? null
+                : new PatchDto(p.Patch.PatchungId, p.Patch.Version, p.Patch.Partner.GeraetId, p.Patch.Partner.Geraet,
+                    p.Patch.Partner.Nummer, p.Patch.Partner.Seite.ToString(), p.Patch.Bezeichnung)))
             .ToList()));
     }
 
@@ -179,11 +193,11 @@ public static class GeraetEndpunkte
     {
         var geraet = await db.Geraete.FirstOrDefaultAsync(g => g.Id == id, abbruch);
         if (geraet is null) return Fehler.NichtGefunden("Gerät nicht gefunden.");
-        var belegt = await db.Anschluesse.CountAsync(a => a.Port != null && a.Port.GeraetId == id, abbruch);
+        var belegt = await db.Ports.CountAsync(p => p.GeraetId == id && (p.Anschluss != null || p.Patchende != null), abbruch);
         if (belegt > 0)
             return Fehler.Konflikt(belegt == 1
-                ? $"An «{geraet.Bezeichnung}» ist noch ein Port belegt. Bitte zuerst den Anschluss lösen."
-                : $"An «{geraet.Bezeichnung}» sind noch {belegt} Ports belegt. Bitte zuerst die Anschlüsse lösen.");
+                ? $"An «{geraet.Bezeichnung}» ist noch ein Port belegt (Kabel oder Patchung). Bitte ihn zuerst freigeben."
+                : $"An «{geraet.Bezeichnung}» sind noch {belegt} Ports belegt (Kabel oder Patchungen). Bitte sie zuerst freigeben.");
 
         db.Entry(geraet).Property(g => g.Version).OriginalValue = version;
         db.Geraete.Remove(geraet);
@@ -224,7 +238,7 @@ public static class GeraetEndpunkte
     private static IQueryable<GeraetDto> Abfrage(IQueryable<Geraet> geraete) =>
         geraete.Select(g => new GeraetDto(
             g.Id, g.Version, g.PositionId, g.Bezeichnung, g.GeraetetypId, g.Geraetetyp.Name, g.Geraetetyp.Kategorie.ToString(),
-            g.Ports.Count, g.Ports.Count(p => p.Anschluss != null)));
+            g.Ports.Count, g.Ports.Count(p => p.Anschluss != null || p.Patchende != null)));
 
     private static GeraetetypDto TypAlsDto(Geraetetyp t)
     {
