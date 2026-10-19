@@ -20,6 +20,8 @@ const emit = defineEmits<{
   loeschen: [verbindung: Verbindung]
   medientypAngelegt: [typ: Medientyp]
   portartAngelegt: [portart: Portart]
+  /** Anschlüsse eines Mediums bearbeiten */
+  anschliessen: [mediumId: number]
 }>()
 
 const medien = ref<Medium[]>([])
@@ -281,6 +283,7 @@ const typInfo = computed(() => props.medientypen.find((t) => t.id === medientypI
             <span class="leise klein">{{ m.medientyp }} · {{ m.anzahlAnschluesse }} {{ m.anzahlAnschluesse === 1 ? 'Anschluss' : 'Anschlüsse' }} pro Ende</span>
             <span class="klein frei">frei: A {{ frei(m, m.belegtA) }}/{{ m.anzahlAnschluesse }} · B {{ frei(m, m.belegtB) }}/{{ m.anzahlAnschluesse }}</span>
           </div>
+          <button type="button" class="symbol anschl" title="Fasern/Adern an Ports anschliessen" @click="emit('anschliessen', m.id)">Anschlüsse</button>
           <button type="button" class="symbol" title="Bearbeiten" @click="bearbeiten(m)">✎</button>
           <button type="button" class="symbol weg" :class="{ bestaetigen: entfernenBestaetigen === m.id }"
             :disabled="m.belegtA + m.belegtB > 0"
@@ -406,6 +409,10 @@ const typInfo = computed(() => props.medientypen.find((t) => t.id === medientypI
   border: 1px solid transparent;
   padding: 0.15rem 0.45rem;
   font-size: 0.85rem;
+}
+.anschl {
+  color: var(--akzent);
+  border-color: var(--rand);
 }
 .symbol:not(:disabled):hover {
   border-color: var(--rand);

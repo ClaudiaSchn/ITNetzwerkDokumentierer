@@ -14,6 +14,8 @@ const emit = defineEmits<{
   /** Gerät geändert oder entfernt (Listen und Zähler neu laden) */
   geaendert: []
   entfernt: []
+  /** Medium öffnen, das einen Port belegt */
+  medium: [mediumId: number]
 }>()
 
 const detail = ref<GeraetDetail | null>(null)
@@ -174,14 +176,16 @@ const belegungText = (p?: Port) =>
                 <template v-if="p">
                   <input v-model="beschriftung[p.id]" type="text" maxlength="100" :placeholder="p.portart"
                     :aria-label="`Port ${p.nummer} ${p.seite}`" />
-                  <span v-if="p.belegung" class="belegt" :title="p.belegung.medientyp">{{ belegungText(p) }}</span>
+                  <button v-if="p.belegung" type="button" class="belegt" :title="`${p.belegung.medientyp} – Anschlüsse anzeigen`"
+                    @click="emit('medium', p.belegung.mediumId)">{{ belegungText(p) }}</button>
                 </template>
               </td>
             </template>
             <template v-else-if="z.einzel">
               <td class="leise">{{ z.einzel.portart }}</td>
               <td><input v-model="beschriftung[z.einzel.id]" type="text" maxlength="100" :aria-label="`Port ${z.nummer}`" /></td>
-              <td><span v-if="z.einzel.belegung" class="belegt" :title="z.einzel.belegung.medientyp">{{ belegungText(z.einzel) }}</span>
+              <td><button v-if="z.einzel.belegung" type="button" class="belegt" :title="`${z.einzel.belegung.medientyp} – Anschlüsse anzeigen`"
+                @click="emit('medium', z.einzel.belegung.mediumId)">{{ belegungText(z.einzel) }}</button>
                 <span v-else class="leise">frei</span></td>
             </template>
           </tr>
@@ -271,6 +275,10 @@ label.inline {
   color: var(--text-leise);
 }
 .belegt {
+  background: none;
+  border: none;
+  padding: 0;
+  text-decoration: underline dotted;
   display: inline-block;
   margin-top: 0.1rem;
   color: #1b7c83;
