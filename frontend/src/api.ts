@@ -231,6 +231,56 @@ export interface GeraetDetail {
   ports: Port[]
 }
 
+/** Port, an dem ein Anschluss hängt */
+export interface AngeschlossenAn {
+  portId: number
+  geraetId: number
+  geraet: string
+  nummer: number
+  seite: Port['seite']
+  bezeichnung: string | null
+  portart: string
+}
+
+export interface Anschluss {
+  id: number
+  version: number
+  ende: 'A' | 'B'
+  nummer: number
+  port: AngeschlossenAn | null
+}
+
+export interface MediumAnschluesse {
+  medium: Medium
+  positionA: PositionKurz
+  positionB: PositionKurz
+  anschluesse: Anschluss[]
+}
+
+/** Port zur Auswahl; erlaubt = Portart passt zum Medientyp; belegtDurch z.B. «K-12 A3» */
+export interface PortWahl {
+  id: number
+  nummer: number
+  seite: Port['seite']
+  bezeichnung: string | null
+  portart: string
+  erlaubt: boolean
+  anschlussId: number | null
+  belegtDurch: string | null
+}
+
+export interface GeraetWahl {
+  id: number
+  bezeichnung: string
+  kategorie: Geraetekategorie
+  ports: PortWahl[]
+}
+
+export interface Portauswahl {
+  a: GeraetWahl[]
+  b: GeraetWahl[]
+}
+
 export interface Status {
   backend: string
   datenbank: string
@@ -440,6 +490,27 @@ export const api = {
 
   geraetEntfernen: (id: number, version: number) =>
     anfrage<void>(`/api/geraete/${id}?version=${version}`, { method: 'DELETE' }),
+
+  mediumAnschluesse: (mediumId: number) => anfrage<MediumAnschluesse>(`/api/medien/${mediumId}/anschluesse`),
+
+  portauswahl: (mediumId: number) => anfrage<Portauswahl>(`/api/medien/${mediumId}/portauswahl`),
+
+  /** Anschluss an einen Port hängen; portId = null löst ihn */
+  anschlussSetzen: (id: number, version: number, portId: number | null) =>
+    anfrage<MediumAnschluesse>(`/api/anschluesse/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version, portId })
+    }),
+
+  fortlaufendAnschliessen: (mediumId: number, angaben: {
+    ende: 'A' | 'B'; abNummer: number; anzahl: number; geraetId: number; seite: string | null; abPortnummer: number
+  }) =>
+    anfrage<MediumAnschluesse>(`/api/medien/${mediumId}/fortlaufend`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(angaben)
+    }),
 
   portsBeschriften: (geraetId: number, ports: { id: number; version: number; bezeichnung: string | null }[]) =>
     anfrage<GeraetDetail>(`/api/geraete/${geraetId}/portbezeichnungen`, {

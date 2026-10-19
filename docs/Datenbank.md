@@ -76,6 +76,7 @@ Die Nummern beziehen sich auf die Regeln im [Konzept](Konzept_Phase1.md#regeln).
 | 7 Ende A nur an Ports an Position A | Backend | Prüfung beim Anschliessen |
 | 8 Port mit höchstens einem Anschluss belegt | Datenbank | Index auf `anschluesse (port_id)` |
 | 8 Portart für Medientyp erlaubt | Backend | Prüfung beim Anschliessen |
+| – Mehrere Anschlüsse fortlaufend anschliessen: alles oder nichts | Backend + Datenbank | Eine Transaktion; beim ersten Problem wird nichts gespeichert |
 | 9 Pro Gerät, Nummer und Seite ein Port | Datenbank | Index auf `ports (geraet_id, nummer, seite)` |
 | 9 Durchgang: Vorne/Hinten, Endgerät: Einzel | Backend | Ports werden aus der Vorlage erzeugt |
 | – Gerätebezeichnung eindeutig pro Position | Backend | Prüfung beim Platzieren und Umbenennen (409) |

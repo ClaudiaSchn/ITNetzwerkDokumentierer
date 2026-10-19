@@ -29,6 +29,7 @@ import VerbindenPanel from '../komponenten/VerbindenPanel.vue'
 import VerbindungPanel from '../komponenten/VerbindungPanel.vue'
 import PositionGeraete from '../komponenten/PositionGeraete.vue'
 import GeraetPanel from '../komponenten/GeraetPanel.vue'
+import MediumPanel from '../komponenten/MediumPanel.vue'
 
 const props = defineProps<{ id: number }>()
 const route = useRoute()
@@ -95,6 +96,8 @@ const medientypen = ref<Medientyp[]>([])
 const geraetAuswahlId = ref<number | null>(null)
 const geraetetypen = ref<Geraetetyp[]>([])
 const geraeteAktualisierung = ref(0)
+/** Geöffnetes Medium (Anschlüsse); liegt über der Verbindung bzw. dem Gerät, aus dem es geöffnet wurde */
+const mediumAuswahlId = ref<number | null>(null)
 const portarten = ref<Portart[]>([])
 
 const auswahl = computed(() => positionen.value.find((p) => p.id === auswahlId.value) ?? null)
@@ -306,6 +309,7 @@ function setzenUmschalten() {
 
 /** Panel schliessen: Entwurf verwerfen, Auswahl aufheben */
 function schliessen() {
+  mediumAuswahlId.value = null
   verbindungAuswahlId.value = null
   geraetAuswahlId.value = null
   entwurf.value = null
@@ -343,6 +347,7 @@ function positionGeloescht(id: number) {
 }
 
 function auswaehlen(id: number) {
+  mediumAuswahlId.value = null
   verbindungAuswahlId.value = null
   geraetAuswahlId.value = null
   entwurf.value = null
@@ -559,6 +564,7 @@ function taste(e: KeyboardEvent) {
   if (e.key !== 'Escape' || werkzeugAktiv.value) return
   if (modus.value === 'importieren' || modus.value === 'einstellungen') modus.value = 'ansehen'
   else if (modus.value === 'verbinden') verbindenBeenden()
+  else if (mediumAuswahlId.value !== null) mediumAuswahlId.value = null
   else if (geraetAuswahlId.value !== null) geraetAuswahlId.value = null
   else if (entwurf.value || auswahlId.value !== null || verbindungAuswahlId.value !== null) schliessen()
   else if (modus.value === 'setzen') modus.value = 'ansehen'
@@ -647,13 +653,16 @@ watch(alleStockwerke, positionenLaden)
         @gespeichert="planGeaendert" @geloescht="planGeloescht" @abbrechen="modus = 'ansehen'" @lage-aendern="lageAendern" />
       <VerbindenPanel v-else-if="modus === 'verbinden' && verbindenAb" :von="verbindenAb" :positionen="positionen"
         :verbindungen="verbindungen" :speichert="verbindetGerade" @waehlen="verbindenMit" @fertig="verbindenBeenden" />
+      <MediumPanel v-else-if="mediumAuswahlId !== null" :medium-id="mediumAuswahlId" @schliessen="mediumAuswahlId = null"
+        @geaendert="geraeteAktualisierung++" />
       <VerbindungPanel v-else-if="verbindungAuswahl" :verbindung="verbindungAuswahl" :sichtbar="sichtbareIds"
         :medientypen="medientypen" :portarten="portarten" @schliessen="verbindungAuswahlId = null" @auswaehlen="auswaehlen"
-        @geaendert="verbindungenNeuLaden" @loeschen="verbindungLoeschen"
+        @geaendert="verbindungenNeuLaden" @loeschen="verbindungLoeschen" @anschliessen="(id: number) => (mediumAuswahlId = id)"
         @medientyp-angelegt="(t: Medientyp) => (medientypen = [...medientypen, t].sort((a, b) => a.name.localeCompare(b.name, 'de')))"
         @portart-angelegt="(p: Portart) => (portarten = [...portarten, p].sort((a, b) => a.name.localeCompare(b.name, 'de')))" />
       <GeraetPanel v-else-if="geraetAuswahlId !== null" :geraet-id="geraetAuswahlId" @schliessen="geraetAuswahlId = null"
-        @zur-position="zurPosition" @geaendert="geraeteGeaendert" @entfernt="geraetEntfernt" />
+        @zur-position="zurPosition" @geaendert="geraeteGeaendert" @entfernt="geraetEntfernt"
+        @medium="(id: number) => (mediumAuswahlId = id)" />
       <PositionenPanel v-else-if="plan.referenziert" :plan="plan" :standort-id="standort.id" :positionen="positionen"
         :typen="typen" :entwurf="entwurf" :auswahl="auswahl" :verschoben-nach="verschobenNach" :vorschlag="vorschlag"
         @gespeichert="positionGespeichert" @geloescht="positionGeloescht" @abbrechen="schliessen"
