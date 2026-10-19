@@ -67,6 +67,8 @@ Die Nummern beziehen sich auf die Regeln im [Konzept](Konzept_Phase1.md#regeln).
 | 5 Zwei verschiedene Positionen | Datenbank | `ck_verbindungen_zwei_positionen` |
 | 5 Höchstens eine Verbindung pro Paar (A–B = B–A) | Datenbank | Index `ux_verbindungen_positionspaar` |
 | 5 Beide Positionen am selben Standort | Backend | Prüfung beim Anlegen |
+| – Verbindung löschen nur ohne Medien | Backend + Datenbank | Backend meldet die Anzahl (409), Fremdschlüssel `ON DELETE RESTRICT` |
+| – Verbindungen nur im Übersichtsmodus anlegen | Oberfläche | Masterplan oder «alle Stockwerke»; «Verbinden» schaltet den Übersichtsmodus bei Bedarf ein |
 | 6 Pro Medium, Ende und Nummer ein Anschluss | Datenbank | Index auf `anschluesse (medium_id, ende, nummer)` |
 | 6 Nummer ≤ Anzahl Anschlüsse | Backend | Anschlüsse werden beim Anlegen des Mediums erzeugt |
 | 7 Ende A nur an Ports an Position A | Backend | Prüfung beim Anschliessen |

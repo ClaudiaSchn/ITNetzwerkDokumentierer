@@ -133,6 +133,24 @@ export interface PositionDaten {
   stockwerk: number
 }
 
+/** Position, kurz – als Ende einer Verbindung */
+export interface PositionKurz {
+  id: number
+  bezeichnung: string
+  positionstyp: string
+  stockwerk: number
+}
+
+/** Verbindung zwischen zwei Positionen; laengeMeter = Luftlinie in der Ebene */
+export interface Verbindung {
+  id: number
+  version: number
+  a: PositionKurz
+  b: PositionKurz
+  laengeMeter: number
+  anzahlMedien: number
+}
+
 export interface Status {
   backend: string
   datenbank: string
@@ -262,5 +280,17 @@ export const api = {
     }),
 
   positionLoeschen: (id: number, version: number) =>
-    anfrage<void>(`/api/positionen/${id}?version=${version}`, { method: 'DELETE' })
+    anfrage<void>(`/api/positionen/${id}?version=${version}`, { method: 'DELETE' }),
+
+  verbindungen: (standortId: number) => anfrage<Verbindung[]>(`/api/standorte/${standortId}/verbindungen`),
+
+  verbindungAnlegen: (standortId: number, positionAId: number, positionBId: number) =>
+    anfrage<Verbindung>(`/api/standorte/${standortId}/verbindungen`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ positionAId, positionBId })
+    }),
+
+  verbindungLoeschen: (id: number, version: number) =>
+    anfrage<void>(`/api/verbindungen/${id}?version=${version}`, { method: 'DELETE' })
 }

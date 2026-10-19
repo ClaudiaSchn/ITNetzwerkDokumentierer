@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { api, type Plan, type PlanListe, type PositionImPlan, type Positionstyp, type Punkt, type Standort } from '../api'
+import {
+  api,
+  type Plan,
+  type PlanListe,
+  type PositionImPlan,
+  type Positionstyp,
+  type Punkt,
+  type Standort,
+  type Verbindung
+} from '../api'
 import { formatDrehung, formatMassstab, formatZahl } from '../geometrie'
 import { naechsteBezeichnung, stockwerkText } from '../format'
 import PlanAnsicht, { type Linie, type Markierung } from '../komponenten/PlanAnsicht.vue'
@@ -12,6 +21,8 @@ import PlanEigenerMassstab from '../komponenten/PlanEigenerMassstab.vue'
 import type { Methode } from '../komponenten/MethodenWahl.vue'
 import PlanImport from '../komponenten/PlanImport.vue'
 import PlanEinstellungen from '../komponenten/PlanEinstellungen.vue'
+import PositionVerbindungen from '../komponenten/PositionVerbindungen.vue'
+import VerbindenPanel from '../komponenten/VerbindenPanel.vue'
 
 const props = defineProps<{ id: number }>()
 const route = useRoute()
@@ -33,11 +44,13 @@ const uploadFehler = ref<string | null>(null)
 /**
  * ansehen = Positionsliste/Auswahl, setzen = Klick erzeugt neue Position,
  * kalibrieren = Masterplan kalibrieren, referenzieren = Plan über Passpunkte ausrichten,
+ * verbinden = Klick auf eine Position verbindet sie mit verbindenVon,
  * importieren / einstellungen = entsprechende Seitenleiste
  */
-type Modus = 'ansehen' | 'setzen' | 'kalibrieren' | 'referenzieren' | 'importieren' | 'einstellungen'
+type Modus = 'ansehen' | 'setzen' | 'verbinden' | 'kalibrieren' | 'referenzieren' | 'importieren' | 'einstellungen'
 const modus = ref<Modus>('ansehen')
 const meldung = ref<string | null>(null)
+const meldungFehler = ref(false)
 const ansicht = ref<InstanceType<typeof PlanAnsicht> | null>(null)
 
 // Kalibrierung
@@ -63,10 +76,17 @@ const verschiebenAktiv = ref(false)
 const verschobenNach = ref<Punkt | null>(null)
 const vorschlag = ref({ bezeichnung: '', positionstypId: null as number | null, stockwerk: 0 })
 
+// Verbindungen (alle des Standorts; gezeichnet werden die zwischen sichtbaren Positionen)
+const verbindungen = ref<Verbindung[]>([])
+/** Ausgangsposition im Modus «verbinden» */
+const verbindenVon = ref<number | null>(null)
+const verbindetGerade = ref(false)
+
 const auswahl = computed(() => positionen.value.find((p) => p.id === auswahlId.value) ?? null)
 
-function melden(text: string) {
+function melden(text: string, fehler = false) {
   meldung.value = text
+  meldungFehler.value = fehler
   setTimeout(() => {
     if (meldung.value === text) meldung.value = null
   }, 5000)
@@ -104,6 +124,7 @@ async function planLaden() {
     kontrolleLinks.value = kontrolleRechts.value = null
     refAnzeige.value = null
     alleStockwerke.value = false
+    verbindenVon.value = null
     vorschlag.value = { ...vorschlag.value, bezeichnung: '', stockwerk: neu.stockwerk }
     modus.value = neu.referenziert ? 'ansehen' : neu.istMasterplan ? 'kalibrieren' : 'referenzieren'
     referenzMethode.value = neu.methode === 'EigenerMassstab' ? 'EigenerMassstab' : 'Passpunkte'
@@ -123,9 +144,14 @@ async function planlisteLaden() {
 
 async function positionenLaden() {
   if (!plan.value?.referenziert) return
-  const [liste, t] = await Promise.all([api.positionenImPlan(plan.value.id, alleStockwerke.value), api.positionstypen()])
+  const [liste, t, v] = await Promise.all([
+    api.positionenImPlan(plan.value.id, alleStockwerke.value),
+    api.positionstypen(),
+    api.verbindungen(props.id)
+  ])
   positionen.value = liste
   typen.value = t
+  verbindungen.value = v
 }
 
 function dateiGewaehlt(ereignis: Event) {
@@ -247,6 +273,7 @@ async function planGeloescht() {
 // --- Positionen ---
 
 function setzenUmschalten() {
+  verbindenVon.value = null
   if (modus.value === 'setzen') {
     modus.value = 'ansehen'
     entwurf.value = null
@@ -301,6 +328,84 @@ function auswaehlen(id: number) {
   if (p) ansicht.value?.zentrieren({ u: p.u, v: p.v })
 }
 
+// --- Verbindungen ---
+
+/** Übersichtsmodus: alle Stockwerke sichtbar (Masterplan immer). Nur hier werden Verbindungen angelegt. */
+const ueberblick = computed(() => !!plan.value && (plan.value.istMasterplan || alleStockwerke.value))
+const sichtbareIds = computed(() => new Set(positionen.value.map((p) => p.id)))
+const verbindenAb = computed(() => positionen.value.find((p) => p.id === verbindenVon.value) ?? null)
+
+async function verbindenStarten() {
+  const von = auswahlId.value
+  if (von === null) return
+  if (!ueberblick.value) {
+    alleStockwerke.value = true
+    await positionenLaden()
+    melden('Verbindungen werden im Übersichtsmodus angelegt – «alle Stockwerke» ist jetzt eingeschaltet.')
+  }
+  schliessen()
+  verbindenVon.value = von
+  modus.value = 'verbinden'
+}
+
+function verbindenBeenden() {
+  const von = verbindenVon.value
+  modus.value = 'ansehen'
+  verbindenVon.value = null
+  if (von !== null && positionen.value.some((p) => p.id === von)) auswahlId.value = von
+}
+
+async function verbindenMit(id: number) {
+  const von = verbindenVon.value
+  if (von === null || id === von || verbindetGerade.value) return
+  const vorhanden = verbindungen.value.find((v) => (v.a.id === von && v.b.id === id) || (v.a.id === id && v.b.id === von))
+  if (vorhanden) {
+    melden(`Zwischen «${vorhanden.a.bezeichnung}» und «${vorhanden.b.bezeichnung}» besteht bereits eine Verbindung.`, true)
+    return
+  }
+  verbindetGerade.value = true
+  try {
+    const v = await api.verbindungAnlegen(props.id, von, id)
+    verbindungen.value = [...verbindungen.value, v]
+    melden(`Verbindung «${v.a.bezeichnung}» – «${v.b.bezeichnung}» angelegt.`)
+    await positionenLaden() // Zähler für die Löschsperre
+  } catch (e) {
+    melden((e as Error).message, true)
+  } finally {
+    verbindetGerade.value = false
+  }
+}
+
+async function verbindungLoeschen(v: Verbindung) {
+  try {
+    await api.verbindungLoeschen(v.id, v.version)
+    verbindungen.value = verbindungen.value.filter((x) => x.id !== v.id)
+    melden(`Verbindung «${v.a.bezeichnung}» – «${v.b.bezeichnung}» gelöscht.`)
+    await positionenLaden()
+  } catch (e) {
+    melden((e as Error).message, true)
+  }
+}
+
+/** Linien der Verbindungen, deren beide Enden im Plan zu sehen sind */
+const verbindungsLinien = computed<Linie[]>(() => {
+  const lage = new Map(positionen.value.map((p) => [p.id, p]))
+  const hervor = modus.value === 'verbinden' ? verbindenVon.value : auswahlId.value
+  return verbindungen.value.flatMap((v) => {
+    const a = lage.get(v.a.id)
+    const b = lage.get(v.b.id)
+    if (!a || !b) return []
+    return [{
+      id: `v-${v.id}`,
+      von: { u: a.u, v: a.v },
+      bis: { u: b.u, v: b.v },
+      art: 'verbindung' as const,
+      aktiv: hervor !== null && (v.a.id === hervor || v.b.id === hervor),
+      hinweis: `${v.a.bezeichnung} – ${v.b.bezeichnung} · ${formatZahl(v.laengeMeter, 0)} m`
+    }]
+  })
+})
+
 // --- Ereignisse aus der Planansicht ---
 
 function klick(p: Punkt) {
@@ -325,6 +430,10 @@ function zeiger(seite: Seite, p: Punkt | null) {
 
 function markierungKlick(id: string) {
   if (!id.startsWith('pos-')) return
+  if (modus.value === 'verbinden') {
+    verbindenMit(Number(id.slice(4)))
+    return
+  }
   auswaehlen(Number(id.slice(4)))
 }
 
@@ -332,7 +441,7 @@ const markierungen = computed<Markierung[]>(() => {
   if (modus.value === 'kalibrieren') return werkzeugMarkierungen.value
   if (modus.value === 'referenzieren') return refAnzeige.value?.links ?? []
   const liste: Markierung[] = positionen.value.map((p) => {
-    const aktiv = p.id === auswahlId.value
+    const aktiv = p.id === (modus.value === 'verbinden' ? verbindenVon.value : auswahlId.value)
     return {
       id: `pos-${p.id}`,
       punkt: aktiv && verschobenNach.value ? verschobenNach.value : { u: p.u, v: p.v },
@@ -350,7 +459,7 @@ const markierungen = computed<Markierung[]>(() => {
 const linien = computed(() => {
   if (modus.value === 'kalibrieren') return werkzeugLinien.value
   if (modus.value === 'referenzieren') return refAnzeige.value?.linienLinks ?? []
-  return []
+  return verbindungsLinien.value
 })
 const klickModus = computed(() => {
   if (modus.value === 'kalibrieren') return kalibrierKlick.value
@@ -382,6 +491,7 @@ const bezugsplanName = computed(() => plaene.value.find((p) => p.id === plan.val
 function taste(e: KeyboardEvent) {
   if (e.key !== 'Escape' || werkzeugAktiv.value) return
   if (modus.value === 'importieren' || modus.value === 'einstellungen') modus.value = 'ansehen'
+  else if (modus.value === 'verbinden') verbindenBeenden()
   else if (entwurf.value || auswahlId.value !== null) schliessen()
   else if (modus.value === 'setzen') modus.value = 'ansehen'
 }
@@ -439,7 +549,7 @@ watch(alleStockwerke, positionenLaden)
         <a :href="plan.pdfUrl">Original-PDF</a>
       </span>
     </div>
-    <p v-if="meldung" class="meldung" role="status">{{ meldung }}</p>
+    <p v-if="meldung" class="meldung" :class="{ fehlermeldung: meldungFehler }" role="status">{{ meldung }}</p>
     <p v-else-if="modus === 'setzen' && !entwurf" class="meldung info" role="status">
       Klicken Sie in den Plan, um eine Position zu setzen. Esc beendet den Modus.
     </p>
@@ -467,11 +577,18 @@ watch(alleStockwerke, positionenLaden)
         :vorschlag-bezug="plan.referenziert ? plan.id : null" @importiert="planImportiert" @abbrechen="modus = 'ansehen'" />
       <PlanEinstellungen v-else-if="modus === 'einstellungen'" :plan="plan" :plaene="plaene"
         @gespeichert="planGeaendert" @geloescht="planGeloescht" @abbrechen="modus = 'ansehen'" @lage-aendern="lageAendern" />
+      <VerbindenPanel v-else-if="modus === 'verbinden' && verbindenAb" :von="verbindenAb" :positionen="positionen"
+        :verbindungen="verbindungen" :speichert="verbindetGerade" @waehlen="verbindenMit" @fertig="verbindenBeenden" />
       <PositionenPanel v-else-if="plan.referenziert" :plan="plan" :standort-id="standort.id" :positionen="positionen"
         :typen="typen" :entwurf="entwurf" :auswahl="auswahl" :verschoben-nach="verschobenNach" :vorschlag="vorschlag"
         @gespeichert="positionGespeichert" @geloescht="positionGeloescht" @abbrechen="schliessen"
         @auswaehlen="auswaehlen" @verschieben="(a: boolean) => { verschiebenAktiv = a; if (!a) verschobenNach = null }"
-        @typ-angelegt="(t: Positionstyp) => (typen = [...typen, t].sort((a, b) => a.name.localeCompare(b.name, 'de')))" />
+        @typ-angelegt="(t: Positionstyp) => (typen = [...typen, t].sort((a, b) => a.name.localeCompare(b.name, 'de')))">
+        <template #auswahl>
+          <PositionVerbindungen v-if="auswahl" :position="auswahl" :verbindungen="verbindungen" :sichtbar="sichtbareIds"
+            @verbinden="verbindenStarten" @auswaehlen="auswaehlen" @loeschen="verbindungLoeschen" />
+        </template>
+      </PositionenPanel>
     </div>
   </div>
 
@@ -572,6 +689,11 @@ watch(alleStockwerke, positionenLaden)
 .aktiv-btn {
   background: #fb8500;
   border-color: #c26400;
+}
+.meldung.fehlermeldung {
+  background: #ffebe9;
+  border-bottom-color: #ff8182;
+  color: #82071e;
 }
 .meldung.info {
   background: #ddf4ff;

@@ -239,6 +239,8 @@ const gefiltert = computed(() => {
         </button>
       </div>
       <p v-if="loeschenGesperrt" class="leise klein">{{ loeschenGesperrt }} – Löschen erst, wenn nichts mehr daran hängt.</p>
+      <!-- Zusatz zur ausgewählten Position (z.B. Verbindungen) -->
+      <slot v-if="auswahl" name="auswahl" />
     </form>
 
     <!-- Liste -->
