@@ -53,6 +53,8 @@ const emit = defineEmits<{
   klick: [punkt: Punkt]
   verschoben: [id: string, punkt: Punkt]
   markierungKlick: [id: string]
+  /** Klick auf eine Verbindungslinie */
+  linieKlick: [id: string]
   /** Mauszeiger über dem Planbild (null = ausserhalb) */
   zeiger: [punkt: Punkt | null]
 }>()
@@ -140,6 +142,7 @@ function ebeneZeichnen() {
     ).addTo(ebene)
     if (l.text) linie.bindTooltip(l.text, { permanent: true, direction: 'center', className: 'linien-text' })
     else if (l.hinweis) linie.bindTooltip(l.hinweis, { sticky: true, className: 'linien-hinweis' })
+    if (verbindung && l.hinweis) linie.on('click', () => emit('linieKlick', l.id))
   }
   for (const m of props.markierungen) {
     const marker = L.marker(nachLatLng(m.punkt), {

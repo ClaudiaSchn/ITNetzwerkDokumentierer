@@ -70,7 +70,9 @@ Die Nummern beziehen sich auf die Regeln im [Konzept](Konzept_Phase1.md#regeln).
 | – Verbindung löschen nur ohne Medien | Backend + Datenbank | Backend meldet die Anzahl (409), Fremdschlüssel `ON DELETE RESTRICT` |
 | – Verbindungen nur im Übersichtsmodus anlegen | Oberfläche | Masterplan oder «alle Stockwerke»; «Verbinden» schaltet den Übersichtsmodus bei Bedarf ein |
 | 6 Pro Medium, Ende und Nummer ein Anschluss | Datenbank | Index auf `anschluesse (medium_id, ende, nummer)` |
-| 6 Nummer ≤ Anzahl Anschlüsse | Backend | Anschlüsse werden beim Anlegen des Mediums erzeugt |
+| 6 Nummer ≤ Anzahl Anschlüsse | Backend | Anschlüsse werden beim Anlegen des Mediums erzeugt; beim Ändern der Anzahl ergänzt bzw. entfernt |
+| – Medium ändern: Medientyp nur ohne belegte Anschlüsse, verkleinern nur, wenn die wegfallenden frei sind | Backend | Prüfung beim Ändern (409) |
+| 10 Medium entfernen nur ohne belegte Anschlüsse | Backend + Datenbank | Backend meldet die Anzahl (409); Anschlüsse werden mitgelöscht |
 | 7 Ende A nur an Ports an Position A | Backend | Prüfung beim Anschliessen |
 | 8 Port mit höchstens einem Anschluss belegt | Datenbank | Index auf `anschluesse (port_id)` |
 | 8 Portart für Medientyp erlaubt | Backend | Prüfung beim Anschliessen |
