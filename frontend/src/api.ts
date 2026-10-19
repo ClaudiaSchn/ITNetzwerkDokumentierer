@@ -182,6 +182,55 @@ export interface MediumDaten {
   anzahlAnschluesse: number
 }
 
+export type Geraetekategorie = 'Durchgang' | 'Endgeraet'
+
+/** Gerätetyp; ports = Kurzbeschreibung wie «24× RJ45 + 4× SFP» */
+export interface Geraetetyp {
+  id: number
+  name: string
+  kategorie: Geraetekategorie
+  anzahlNummern: number
+  ports: string
+}
+
+export interface Geraet {
+  id: number
+  version: number
+  positionId: number
+  bezeichnung: string
+  geraetetypId: number
+  geraetetyp: string
+  kategorie: Geraetekategorie
+  anzahlPorts: number
+  belegtePorts: number
+}
+
+/** Welches Medium (Kabelnummer, Ende, Faser/Ader) einen Port belegt */
+export interface Belegung {
+  mediumId: number
+  kabelnummer: string
+  ende: 'A' | 'B'
+  nummer: number
+  medientyp: string
+}
+
+export interface Port {
+  id: number
+  version: number
+  nummer: number
+  seite: 'Einzel' | 'Vorne' | 'Hinten'
+  portartId: number
+  portart: string
+  bezeichnung: string | null
+  belegung: Belegung | null
+}
+
+export interface GeraetDetail {
+  geraet: Geraet
+  position: string
+  ports: Port[]
+}
+
 export interface Status {
   backend: string
   datenbank: string
@@ -360,5 +409,42 @@ export const api = {
     }),
 
   mediumEntfernen: (id: number, version: number) =>
-    anfrage<void>(`/api/medien/${id}?version=${version}`, { method: 'DELETE' })
+    anfrage<void>(`/api/medien/${id}?version=${version}`, { method: 'DELETE' }),
+
+  geraetetypen: () => anfrage<Geraetetyp[]>('/api/geraetetypen'),
+
+  geraetetypAnlegen: (name: string, kategorie: Geraetekategorie, gruppen: { anzahl: number; portartId: number }[]) =>
+    anfrage<Geraetetyp>('/api/geraetetypen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, kategorie, gruppen })
+    }),
+
+  geraete: (positionId: number) => anfrage<Geraet[]>(`/api/positionen/${positionId}/geraete`),
+
+  geraetPlatzieren: (positionId: number, bezeichnung: string, geraetetypId: number) =>
+    anfrage<Geraet>(`/api/positionen/${positionId}/geraete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bezeichnung, geraetetypId })
+    }),
+
+  geraet: (id: number) => anfrage<GeraetDetail>(`/api/geraete/${id}`),
+
+  geraetAendern: (id: number, version: number, bezeichnung: string) =>
+    anfrage<Geraet>(`/api/geraete/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version, bezeichnung })
+    }),
+
+  geraetEntfernen: (id: number, version: number) =>
+    anfrage<void>(`/api/geraete/${id}?version=${version}`, { method: 'DELETE' }),
+
+  portsBeschriften: (geraetId: number, ports: { id: number; version: number; bezeichnung: string | null }[]) =>
+    anfrage<GeraetDetail>(`/api/geraete/${geraetId}/portbezeichnungen`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ports })
+    })
 }

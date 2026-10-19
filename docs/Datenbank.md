@@ -78,6 +78,8 @@ Die Nummern beziehen sich auf die Regeln im [Konzept](Konzept_Phase1.md#regeln).
 | 8 Portart für Medientyp erlaubt | Backend | Prüfung beim Anschliessen |
 | 9 Pro Gerät, Nummer und Seite ein Port | Datenbank | Index auf `ports (geraet_id, nummer, seite)` |
 | 9 Durchgang: Vorne/Hinten, Endgerät: Einzel | Backend | Ports werden aus der Vorlage erzeugt |
+| – Gerätebezeichnung eindeutig pro Position | Backend | Prüfung beim Platzieren und Umbenennen (409) |
+| 10 Gerät entfernen nur ohne belegte Ports | Backend + Datenbank | Backend meldet die Anzahl (409), Fremdschlüssel Anschluss → Port `ON DELETE RESTRICT`; Ports werden mitgelöscht |
 | 10 Löschen nur, wenn nichts mehr daran hängt | Datenbank | Fremdschlüssel mit `ON DELETE RESTRICT` |
 | 12 Gleichzeitige Änderungen | Datenbank + EF Core | `xmin` als Versionsnummer; der Browser schickt die geladene Version mit, bei Abweichung Antwort 409 |
 

@@ -68,5 +68,6 @@ app.MapPlanEndpunkte();
 app.MapPositionEndpunkte();
 app.MapVerbindungEndpunkte();
 app.MapMedienEndpunkte();
+app.MapGeraetEndpunkte();
 
 app.Run();
