@@ -331,6 +331,65 @@ export interface Portauswahl {
   b: GeraetWahl[]
 }
 
+/** Medium auf einem Wegabschnitt; frei = Fasern/Adern, die für eine neue Strecke verfügbar sind */
+export interface WegMedium {
+  id: number
+  kabelnummer: string
+  medientyp: string
+  anzahl: number
+  frei: number
+}
+
+export interface WegAbschnitt {
+  verbindungId: number
+  von: PositionKurz
+  nach: PositionKurz
+  laengeMeter: number
+  frei: number
+  medien: WegMedium[]
+}
+
+export interface Weg {
+  laengeMeter: number
+  /** Kleinste Zahl freier Fasern über alle Abschnitte */
+  frei: number
+  abschnitte: WegAbschnitt[]
+}
+
+export interface VerlaufPort {
+  id: number
+  geraetId: number
+  geraet: string
+  kategorie: Geraetekategorie
+  nummer: number
+  seite: Port['seite']
+  bezeichnung: string | null
+  portart: string
+}
+
+/** Punkt im Leitungsverlauf; port = null: offenes, nicht aufgelegtes Faser-Ende */
+export interface VerlaufPunkt {
+  port: VerlaufPort | null
+  position: PositionKurz
+}
+
+export interface VerlaufGlied {
+  art: 'kabel' | 'durchgang' | 'patch'
+  mediumId: number | null
+  kabelnummer: string | null
+  faser: string | null
+  verbindungId: number | null
+  patchungId: number | null
+  bezeichnung: string | null
+}
+
+export interface Verlauf {
+  punkte: VerlaufPunkt[]
+  glieder: VerlaufGlied[]
+  laengeMeter: number
+  verbindungIds: number[]
+}
+
 export interface Status {
   backend: string
   datenbank: string
@@ -582,6 +641,15 @@ export const api = {
 
   patchungLoeschen: (id: number, version: number) =>
     anfrage<void>(`/api/patchungen/${id}?version=${version}`, { method: 'DELETE' }),
+
+  wege: (standortId: number, von: number, nach: number, nurFrei: boolean, medientypId: number | null) =>
+    anfrage<{ wege: Weg[]; begrenzt: boolean }>(
+      `/api/standorte/${standortId}/wege?von=${von}&nach=${nach}&nurFrei=${nurFrei}${medientypId !== null ? `&medientypId=${medientypId}` : ''}`
+    ),
+
+  verlauf: (portId: number) => anfrage<Verlauf>(`/api/ports/${portId}/verlauf`),
+
+  geraetWege: (von: number, nach: number) => anfrage<Verlauf[]>(`/api/geraete/${von}/wege?nach=${nach}`),
 
   portsBeschriften: (geraetId: number, ports: { id: number; version: number; bezeichnung: string | null }[]) =>
     anfrage<GeraetDetail>(`/api/geraete/${geraetId}/portbezeichnungen`, {

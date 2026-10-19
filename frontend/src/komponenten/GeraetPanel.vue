@@ -18,6 +18,8 @@ const emit = defineEmits<{
   medium: [mediumId: number]
   /** Anderes Gerät öffnen (Partner einer Patchung) */
   geraet: [geraetId: number]
+  /** Leitungsverlauf eines Ports zeigen */
+  verlauf: [portId: number]
 }>()
 
 const detail = ref<GeraetDetail | null>(null)
@@ -185,6 +187,8 @@ const belegungText = (p?: Port) =>
                     @click="emit('medium', p.belegung.mediumId)">{{ belegungText(p) }}</button>
                   <button v-else-if="p.patch" type="button" class="belegt patch" :title="`Patchung${p.patch.bezeichnung ? ' ' + p.patch.bezeichnung : ''} – Gerät öffnen`"
                     @click="emit('geraet', p.patch.partnerGeraetId)">{{ patchText(p) }}</button>
+                  <button v-if="p.belegung || p.patch" type="button" class="verlauf-btn" title="Leitungsverlauf zeigen"
+                    :aria-label="`Verlauf Port ${p.nummer} ${p.seite}`" @click="emit('verlauf', p.id)">⤳</button>
                 </template>
               </td>
             </template>
@@ -196,6 +200,8 @@ const belegungText = (p?: Port) =>
                 <button v-else-if="z.einzel.patch" type="button" class="belegt patch"
                   :title="`Patchung${z.einzel.patch.bezeichnung ? ' ' + z.einzel.patch.bezeichnung : ''} – Gerät öffnen`"
                   @click="emit('geraet', z.einzel.patch.partnerGeraetId)">{{ patchText(z.einzel) }}</button>
+                <button v-if="z.einzel.belegung || z.einzel.patch" type="button" class="verlauf-btn" title="Leitungsverlauf zeigen"
+                  :aria-label="`Verlauf Port ${z.nummer}`" @click="emit('verlauf', z.einzel.id)">⤳</button>
                 <span v-else class="leise">frei</span></td>
             </template>
           </tr>
@@ -294,6 +300,18 @@ label.inline {
   color: #1b7c83;
   font-weight: 600;
   font-size: 0.8rem;
+}
+.verlauf-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: #2da44e;
+  padding: 0 0.3rem;
+  margin-left: 0.2rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.verlauf-btn:hover {
+  border-color: #2da44e;
 }
 .belegt.patch {
   color: #8250df;
