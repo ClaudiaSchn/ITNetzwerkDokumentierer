@@ -19,12 +19,19 @@ export interface Markierung {
   neu?: boolean
 }
 
-/** Linie zwischen zwei Planpunkten (z.B. Messstrecke). */
+/** Linie zwischen zwei Planpunkten (z.B. Messstrecke oder Verbindung). */
 export interface Linie {
   id: string
   von: Punkt
   bis: Punkt
+  /** Dauerhaft angezeigter Text (Messstrecken) */
   text?: string
+  /** mess = gestrichelte Hilfslinie (Vorgabe), verbindung = Verbindung zwischen Positionen */
+  art?: 'mess' | 'verbindung'
+  /** Hervorgehoben (z.B. Verbindungen der ausgewählten Position) */
+  aktiv?: boolean
+  /** Text beim Darüberfahren */
+  hinweis?: string
 }
 
 const props = withDefaults(
@@ -126,13 +133,13 @@ function symbol(m: Markierung) {
 function ebeneZeichnen() {
   ebene.clearLayers()
   for (const l of props.linien) {
-    const linie = L.polyline([nachLatLng(l.von), nachLatLng(l.bis)], {
-      color: '#0969da',
-      weight: 2,
-      dashArray: '6 4',
-      interactive: false
-    }).addTo(ebene)
+    const verbindung = l.art === 'verbindung'
+    const linie = L.polyline([nachLatLng(l.von), nachLatLng(l.bis)], verbindung
+      ? { color: l.aktiv ? '#fb8500' : '#1b7c83', weight: l.aktiv ? 4 : 3, opacity: 0.85, interactive: !!l.hinweis }
+      : { color: '#0969da', weight: 2, dashArray: '6 4', interactive: false }
+    ).addTo(ebene)
     if (l.text) linie.bindTooltip(l.text, { permanent: true, direction: 'center', className: 'linien-text' })
+    else if (l.hinweis) linie.bindTooltip(l.hinweis, { sticky: true, className: 'linien-hinweis' })
   }
   for (const m of props.markierungen) {
     const marker = L.marker(nachLatLng(m.punkt), {
@@ -404,6 +411,9 @@ defineExpose({ zentrieren })
   color: #0550ae;
   font-weight: 600;
   box-shadow: none;
+}
+.linien-hinweis {
+  font-weight: 600;
 }
 .linien-text::before {
   display: none;

@@ -66,5 +66,6 @@ app.MapGet("/api/health", async (NetzDbContext db, CancellationToken abbruch) =>
 app.MapStandortEndpunkte();
 app.MapPlanEndpunkte();
 app.MapPositionEndpunkte();
+app.MapVerbindungEndpunkte();
 
 app.Run();
