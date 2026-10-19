@@ -22,7 +22,8 @@ public record PositionImPlanDto(
     double U,
     double V,
     int AnzahlGeraete,
-    int AnzahlVerbindungen);
+    int AnzahlVerbindungen,
+    int AnzahlOffeneKommentare);
 
 /// <summary>Neue Position: Klickpunkt (u, v) in einem kalibrierten Plan.</summary>
 public record PositionAnlegen(int PlanId, double U, double V, string? Bezeichnung, int PositionstypId, int? Stockwerk);
@@ -171,6 +172,11 @@ public static class PositionEndpunkte
             return Fehler.Konflikt(
                 $"«{position.Bezeichnung}» kann nicht gelöscht werden: Es hängen noch {geraete} Gerät(e) und " +
                 $"{verbindungen} Verbindung(en) daran. Bitte diese zuerst entfernen.");
+        var offen = await db.Kommentare.CountAsync(k => k.PositionId == id && k.Status == Kommentarstatus.Offen, abbruch);
+        if (offen > 0)
+            return Fehler.Konflikt(offen == 1
+                ? $"«{position.Bezeichnung}» hat noch einen offenen Kommentar. Bitte ihn zuerst erledigen oder löschen."
+                : $"«{position.Bezeichnung}» hat noch {offen} offene Kommentare. Bitte diese zuerst erledigen oder löschen.");
 
         db.Entry(position).Property(p => p.Version).OriginalValue = version;
         db.Positionen.Remove(position);
@@ -196,14 +202,15 @@ public static class PositionEndpunkte
         return null;
     }
 
-    private record PositionMitZaehlern(Position Position, string Typ, int Geraete, int Verbindungen);
+    private record PositionMitZaehlern(Position Position, string Typ, int Geraete, int Verbindungen, int OffeneKommentare);
 
     private static IQueryable<PositionMitZaehlern> AbfrageMitZaehlern(NetzDbContext db, IQueryable<Position> positionen) =>
         positionen.Select(p => new PositionMitZaehlern(
             p,
             p.Positionstyp.Name,
             p.Geraete.Count,
-            db.Verbindungen.Count(v => v.PositionAId == p.Id || v.PositionBId == p.Id)));
+            db.Verbindungen.Count(v => v.PositionAId == p.Id || v.PositionBId == p.Id),
+            p.Kommentare.Count(k => k.Status == Kommentarstatus.Offen)));
 
     private static async Task<PositionImPlanDto> EinzelnLaden(NetzDbContext db, int id, Plan plan, CancellationToken abbruch)
     {
@@ -216,6 +223,6 @@ public static class PositionEndpunkte
         var p = k.Position;
         var imPlan = Geometrie.NachPlan(plan, new Weltpunkt(p.X, p.Y));
         return new PositionImPlanDto(p.Id, p.Version, p.Bezeichnung, p.PositionstypId, k.Typ, p.Stockwerk,
-            p.X, p.Y, imPlan.U, imPlan.V, k.Geraete, k.Verbindungen);
+            p.X, p.Y, imPlan.U, imPlan.V, k.Geraete, k.Verbindungen, k.OffeneKommentare);
     }
 }

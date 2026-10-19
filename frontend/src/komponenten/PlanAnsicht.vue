@@ -17,6 +17,8 @@ export interface Markierung {
   aktiv?: boolean
   /** Noch nicht gespeichert */
   neu?: boolean
+  /** Kleine Zahl am Punkt (z.B. offene Kommentare); 0/leer = keine */
+  zaehler?: number
 }
 
 /** Linie zwischen zwei Planpunkten (z.B. Messstrecke oder Verbindung). */
@@ -119,7 +121,7 @@ function symbol(m: Markierung) {
   if (m.art === 'position') {
     return L.divIcon({
       className: `markierung markierung-position${zusatz}`,
-      html: `<span class="punkt"></span>${text}`,
+      html: `<span class="punkt"></span>${text}${m.zaehler ? `<span class="zaehler" title="offene Kommentare">${m.zaehler}</span>` : ''}`,
       iconSize: [16, 16],
       iconAnchor: [8, 8]
     })
@@ -381,6 +383,21 @@ defineExpose({ zentrieren })
   left: 14px;
   top: -6px;
   color: #3e1f79;
+}
+.markierung-position .zaehler {
+  position: absolute;
+  left: -9px;
+  top: -11px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #cf222e;
+  color: #fff;
+  font: 700 10px/16px system-ui, sans-serif;
+  text-align: center;
+  border: 1px solid #fff;
+  pointer-events: none;
 }
 .markierung-position.aktiv .punkt {
   background: #fb8500;

@@ -16,3 +16,27 @@ export function naechsteBezeichnung(bezeichnung: string): string {
   const neu = String(Number(zahl) + 1).padStart(zahl.length, '0')
   return `${vorne}${neu}${hinten}`
 }
+
+/** Zeitpunkt kurz und lesbar: «19.10.2026, 14:05» */
+export function formatZeit(iso: string): string {
+  return new Date(iso).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+const VERFASSER_SCHLUESSEL = 'netzdoku.verfasser'
+
+/** Zuletzt verwendeter Verfasser (nur in diesem Browser gespeichert) */
+export function verfasserLesen(): string {
+  try {
+    return localStorage.getItem(VERFASSER_SCHLUESSEL) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function verfasserMerken(name: string) {
+  try {
+    localStorage.setItem(VERFASSER_SCHLUESSEL, name)
+  } catch {
+    // Speicher nicht verfügbar (z.B. privates Fenster) – dann eben nicht merken
+  }
+}

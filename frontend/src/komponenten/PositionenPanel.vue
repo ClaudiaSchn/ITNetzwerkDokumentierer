@@ -158,11 +158,16 @@ async function loeschen() {
   }
 }
 
-const loeschenGesperrt = computed(() =>
-  props.auswahl && (props.auswahl.anzahlGeraete > 0 || props.auswahl.anzahlVerbindungen > 0)
-    ? `Gesperrt: ${props.auswahl.anzahlGeraete} Gerät(e), ${props.auswahl.anzahlVerbindungen} Verbindung(en)`
-    : null
-)
+const loeschenGesperrt = computed(() => {
+  const a = props.auswahl
+  if (!a) return null
+  const teile = [
+    a.anzahlGeraete > 0 ? `${a.anzahlGeraete} Gerät(e)` : '',
+    a.anzahlVerbindungen > 0 ? `${a.anzahlVerbindungen} Verbindung(en)` : '',
+    a.anzahlOffeneKommentare > 0 ? `${a.anzahlOffeneKommentare} offene(r) Kommentar(e)` : ''
+  ].filter(Boolean)
+  return teile.length ? `Gesperrt: ${teile.join(', ')}` : null
+})
 
 // Liste
 const suche = ref('')

@@ -125,6 +125,7 @@ export interface PositionImPlan {
   v: number
   anzahlGeraete: number
   anzahlVerbindungen: number
+  anzahlOffeneKommentare: number
 }
 
 export interface PositionDaten {
@@ -390,6 +391,18 @@ export interface Verlauf {
   verbindungIds: number[]
 }
 
+export type Kommentarstatus = 'Offen' | 'Erledigt'
+
+export interface Kommentar {
+  id: number
+  version: number
+  position: PositionKurz
+  text: string
+  verfasser: string
+  status: Kommentarstatus
+  erstelltAm: string
+}
+
 export interface Status {
   backend: string
   datenbank: string
@@ -650,6 +663,29 @@ export const api = {
   verlauf: (portId: number) => anfrage<Verlauf>(`/api/ports/${portId}/verlauf`),
 
   geraetWege: (von: number, nach: number) => anfrage<Verlauf[]>(`/api/geraete/${von}/wege?nach=${nach}`),
+
+  kommentare: (positionId: number) => anfrage<Kommentar[]>(`/api/positionen/${positionId}/kommentare`),
+
+  /** Kommentare eines Standorts; status «Offen» (Vorgabe), «Erledigt» oder «alle» */
+  standortKommentare: (standortId: number, status: Kommentarstatus | 'alle' = 'Offen') =>
+    anfrage<Kommentar[]>(`/api/standorte/${standortId}/kommentare?status=${status}`),
+
+  kommentarAnlegen: (positionId: number, text: string, verfasser: string) =>
+    anfrage<Kommentar>(`/api/positionen/${positionId}/kommentare`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, verfasser })
+    }),
+
+  kommentarAendern: (id: number, version: number, aenderung: { text?: string; status?: Kommentarstatus }) =>
+    anfrage<Kommentar>(`/api/kommentare/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version, ...aenderung })
+    }),
+
+  kommentarLoeschen: (id: number, version: number) =>
+    anfrage<void>(`/api/kommentare/${id}?version=${version}`, { method: 'DELETE' }),
 
   portsBeschriften: (geraetId: number, ports: { id: number; version: number; bezeichnung: string | null }[]) =>
     anfrage<GeraetDetail>(`/api/geraete/${geraetId}/portbezeichnungen`, {
