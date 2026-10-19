@@ -27,7 +27,7 @@ export interface Linie {
   /** Dauerhaft angezeigter Text (Messstrecken) */
   text?: string
   /** mess = gestrichelte Hilfslinie (Vorgabe), verbindung = Verbindung zwischen Positionen */
-  art?: 'mess' | 'verbindung'
+  art?: 'mess' | 'verbindung' | 'weg'
   /** Hervorgehoben (z.B. Verbindungen der ausgewählten Position) */
   aktiv?: boolean
   /** Text beim Darüberfahren */
@@ -136,7 +136,9 @@ function ebeneZeichnen() {
   ebene.clearLayers()
   for (const l of props.linien) {
     const verbindung = l.art === 'verbindung'
-    const linie = L.polyline([nachLatLng(l.von), nachLatLng(l.bis)], verbindung
+    const linie = L.polyline([nachLatLng(l.von), nachLatLng(l.bis)], l.art === 'weg'
+      ? { color: '#2da44e', weight: 7, opacity: 0.9, interactive: !!l.hinweis }
+      : verbindung
       ? { color: l.aktiv ? '#fb8500' : '#1b7c83', weight: l.aktiv ? 4 : 3, opacity: 0.85, interactive: !!l.hinweis }
       : { color: '#0969da', weight: 2, dashArray: '6 4', interactive: false }
     ).addTo(ebene)

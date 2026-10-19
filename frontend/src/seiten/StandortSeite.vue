@@ -31,6 +31,7 @@ import PositionGeraete from '../komponenten/PositionGeraete.vue'
 import GeraetPanel from '../komponenten/GeraetPanel.vue'
 import MediumPanel from '../komponenten/MediumPanel.vue'
 import PositionPatchungen from '../komponenten/PositionPatchungen.vue'
+import WegPanel from '../komponenten/WegPanel.vue'
 
 const props = defineProps<{ id: number }>()
 const route = useRoute()
@@ -55,7 +56,7 @@ const uploadFehler = ref<string | null>(null)
  * verbinden = Klick auf eine Position verbindet sie mit verbindenVon,
  * importieren / einstellungen = entsprechende Seitenleiste
  */
-type Modus = 'ansehen' | 'setzen' | 'verbinden' | 'kalibrieren' | 'referenzieren' | 'importieren' | 'einstellungen'
+type Modus = 'ansehen' | 'setzen' | 'verbinden' | 'weg' | 'kalibrieren' | 'referenzieren' | 'importieren' | 'einstellungen'
 const modus = ref<Modus>('ansehen')
 const meldung = ref<string | null>(null)
 const meldungFehler = ref(false)
@@ -437,6 +438,46 @@ function verbindungOeffnen(id: number) {
   verbindungAuswahlId.value = id
 }
 
+// --- Wegsuche ---
+
+const wegPanel = ref<InstanceType<typeof WegPanel> | null>(null)
+const wegStart = ref<number | null>(null)
+const wegVerlaufPort = ref<number | null>(null)
+/** Im Plan markierter Weg */
+const wegVerbindungen = ref<Set<number>>(new Set())
+const wegPositionen = ref<Set<number>>(new Set())
+
+/** Wegsuche im Übersichtsmodus starten; optional mit dem Leitungsverlauf eines Ports */
+async function wegStarten(portId: number | null = null) {
+  if (!ueberblick.value) {
+    alleStockwerke.value = true
+    await positionenLaden()
+    melden('Die Wegsuche läuft im Übersichtsmodus – «alle Stockwerke» ist jetzt eingeschaltet.')
+  }
+  wegStart.value = auswahlId.value
+  wegVerlaufPort.value = portId
+  schliessen()
+  modus.value = 'weg'
+}
+
+function wegBeenden() {
+  modus.value = 'ansehen'
+  wegVerbindungen.value = new Set()
+  wegPositionen.value = new Set()
+}
+
+function wegMarkieren(verbindungIds: number[], positionIds: number[]) {
+  wegVerbindungen.value = new Set(verbindungIds)
+  wegPositionen.value = new Set(positionIds)
+}
+
+/** Aus der Wegsuche ein Gerät oder Kabel öffnen: Wegsuche endet */
+function ausWeg(art: 'geraet' | 'medium', id: number) {
+  wegBeenden()
+  if (art === 'geraet') geraetOeffnen(id)
+  else mediumAuswahlId.value = id
+}
+
 /** Nach Änderungen an Medien die Zähler der Verbindungen neu laden */
 async function verbindungenNeuLaden() {
   verbindungen.value = await api.verbindungen(props.id)
@@ -458,7 +499,8 @@ async function verbindungLoeschen(v: Verbindung) {
 const verbindungsLinien = computed<Linie[]>(() => {
   const lage = new Map(positionen.value.map((p) => [p.id, p]))
   const hervor = modus.value === 'verbinden' ? verbindenVon.value : auswahlId.value
-  return verbindungen.value.flatMap((v) => {
+  const weg = modus.value === 'weg'
+  const liste = verbindungen.value.flatMap((v) => {
     const a = lage.get(v.a.id)
     const b = lage.get(v.b.id)
     if (!a || !b) return []
@@ -466,11 +508,13 @@ const verbindungsLinien = computed<Linie[]>(() => {
       id: `v-${v.id}`,
       von: { u: a.u, v: a.v },
       bis: { u: b.u, v: b.v },
-      art: 'verbindung' as const,
+      art: weg && wegVerbindungen.value.has(v.id) ? ('weg' as const) : ('verbindung' as const),
       aktiv: v.id === verbindungAuswahlId.value || (hervor !== null && (v.a.id === hervor || v.b.id === hervor)),
       hinweis: `${v.a.bezeichnung} – ${v.b.bezeichnung} · ${formatZahl(v.laengeMeter, 0)} m`
     }]
   })
+  // Weg zuoberst zeichnen
+  return [...liste.filter((l) => l.art !== 'weg'), ...liste.filter((l) => l.art === 'weg')]
 })
 
 // --- Ereignisse aus der Planansicht ---
@@ -506,6 +550,10 @@ function markierungKlick(id: string) {
     verbindenMit(Number(id.slice(4)))
     return
   }
+  if (modus.value === 'weg') {
+    wegPanel.value?.positionKlick(Number(id.slice(4)))
+    return
+  }
   auswaehlen(Number(id.slice(4)))
 }
 
@@ -515,6 +563,7 @@ const markierungen = computed<Markierung[]>(() => {
   const liste: Markierung[] = positionen.value.map((p) => {
     const aktiv = p.id === (modus.value === 'verbinden' ? verbindenVon.value : auswahlId.value)
       || p.id === verbindungAuswahl.value?.a.id || p.id === verbindungAuswahl.value?.b.id
+      || (modus.value === 'weg' && wegPositionen.value.has(p.id))
     return {
       id: `pos-${p.id}`,
       punkt: aktiv && verschobenNach.value ? verschobenNach.value : { u: p.u, v: p.v },
@@ -565,6 +614,7 @@ function taste(e: KeyboardEvent) {
   if (e.key !== 'Escape' || werkzeugAktiv.value) return
   if (modus.value === 'importieren' || modus.value === 'einstellungen') modus.value = 'ansehen'
   else if (modus.value === 'verbinden') verbindenBeenden()
+  else if (modus.value === 'weg') wegBeenden()
   else if (mediumAuswahlId.value !== null) mediumAuswahlId.value = null
   else if (geraetAuswahlId.value !== null) geraetAuswahlId.value = null
   else if (entwurf.value || auswahlId.value !== null || verbindungAuswahlId.value !== null) schliessen()
@@ -616,6 +666,8 @@ watch(alleStockwerke, positionenLaden)
             title="Klick in den Plan setzt eine neue Position (Esc beendet)" @click="setzenUmschalten">
             {{ modus === 'setzen' ? '✓ Position setzen' : '＋ Position setzen' }}
           </button>
+          <button v-if="plan.referenziert" type="button" class="zweitrangig klein-btn" :class="{ gedrueckt: modus === 'weg' }"
+            title="Wege zwischen Positionen oder Geräten suchen" @click="modus === 'weg' ? wegBeenden() : wegStarten()">Weg suchen</button>
           <button type="button" class="zweitrangig klein-btn" :class="{ gedrueckt: modus === 'einstellungen' }"
             @click="seitenleiste('einstellungen')">Plan-Einstellungen</button>
           <button v-if="standort.masterplan?.referenziert || plan.referenziert" type="button" class="zweitrangig klein-btn"
@@ -654,6 +706,9 @@ watch(alleStockwerke, positionenLaden)
         @gespeichert="planGeaendert" @geloescht="planGeloescht" @abbrechen="modus = 'ansehen'" @lage-aendern="lageAendern" />
       <VerbindenPanel v-else-if="modus === 'verbinden' && verbindenAb" :von="verbindenAb" :positionen="positionen"
         :verbindungen="verbindungen" :speichert="verbindetGerade" @waehlen="verbindenMit" @fertig="verbindenBeenden" />
+      <WegPanel v-else-if="modus === 'weg'" ref="wegPanel" :standort-id="standort.id" :positionen="positionen"
+        :medientypen="medientypen" :start-position="wegStart" :verlauf-port="wegVerlaufPort" @fertig="wegBeenden"
+        @markieren="wegMarkieren" @geraet="(id: number) => ausWeg('geraet', id)" @medium="(id: number) => ausWeg('medium', id)" />
       <MediumPanel v-else-if="mediumAuswahlId !== null" :medium-id="mediumAuswahlId" @schliessen="mediumAuswahlId = null"
         @geaendert="geraeteAktualisierung++" />
       <VerbindungPanel v-else-if="verbindungAuswahl" :verbindung="verbindungAuswahl" :sichtbar="sichtbareIds"
@@ -663,7 +718,7 @@ watch(alleStockwerke, positionenLaden)
         @portart-angelegt="(p: Portart) => (portarten = [...portarten, p].sort((a, b) => a.name.localeCompare(b.name, 'de')))" />
       <GeraetPanel v-else-if="geraetAuswahlId !== null" :geraet-id="geraetAuswahlId" @schliessen="geraetAuswahlId = null"
         @zur-position="zurPosition" @geaendert="geraeteGeaendert" @entfernt="geraetEntfernt"
-        @medium="(id: number) => (mediumAuswahlId = id)" @geraet="geraetOeffnen" />
+        @medium="(id: number) => (mediumAuswahlId = id)" @geraet="geraetOeffnen" @verlauf="(id: number) => wegStarten(id)" />
       <PositionenPanel v-else-if="plan.referenziert" :plan="plan" :standort-id="standort.id" :positionen="positionen"
         :typen="typen" :entwurf="entwurf" :auswahl="auswahl" :verschoben-nach="verschobenNach" :vorschlag="vorschlag"
         @gespeichert="positionGespeichert" @geloescht="positionGeloescht" @abbrechen="schliessen"

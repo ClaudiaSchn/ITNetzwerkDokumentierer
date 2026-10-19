@@ -90,6 +90,7 @@ Phase 1 umfasst fünf Bereiche und zwei Akteure. Der **IT-Mitarbeiter** erfasst 
 | Use Case | Festlegung |
 | --- | --- |
 | Weg suchen | Von Position zu Position oder von Gerät/Port zu Gerät/Port. Filter «nur Wege mit freier Kapazität». Ergebnis wird im Plan markiert. |
+| Leitungsverlauf | Von einem Port aus durch Kabel, Patchpanels (vorne ↔ hinten) und Patchungen bis zu den Endgeräten bzw. offenen Enden. Aktive Geräte (Switches) werden nicht durchquert. |
 | Strecke verfolgen | Von einem Port über Durchgangsgeräte bis zum nächsten Endgerät. |
 | Freie Kapazität anzeigen | Pro Position oder Gerät sowie zwischen Positionen (z.B. alle freien LWL-Fasern zwischen Gebäude A und B). |
 | Kommentar erfassen (mobil) | Hängt an einer Position, mit Verfasser (freies Feld), Status «offen». |
@@ -133,6 +134,7 @@ Positionen hängen am Standort, nicht am Plan: Sie speichern nur ihre absolute K
 9. Durchgangsgerät: pro Nummer ein Port VORNE und einer HINTEN, intern durchverbunden. Endgerät: Ports EINZEL.
 10. Position, Gerät und Medium sind nur löschbar, wenn nichts mehr daran hängt bzw. belegt ist.
 11. Eine Patchung verbindet zwei verschiedene Ports derselben Position. Ein Port ist höchstens einmal belegt – entweder durch einen Anschluss oder durch eine Patchung.
+12. Eine Faser/Ader ist **frei**, wenn jedes ihrer beiden Enden entweder noch nicht aufgelegt ist oder auf einem Durchgangsgerät aufliegt, dessen Gegenseite (z.B. Patchpanel vorne) frei ist. Die freie Kapazität eines Weges ist die kleinste Zahl freier Fasern über alle Abschnitte.
 
 ![Klassendiagramm Datenmodell Phase 1](diagramme/kd_01_datenmodell.png)
 
