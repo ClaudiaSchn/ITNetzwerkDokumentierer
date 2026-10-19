@@ -16,6 +16,8 @@ const emit = defineEmits<{
   entfernt: []
   /** Medium öffnen, das einen Port belegt */
   medium: [mediumId: number]
+  /** Anderes Gerät öffnen (Partner einer Patchung) */
+  geraet: [geraetId: number]
 }>()
 
 const detail = ref<GeraetDetail | null>(null)
@@ -120,6 +122,9 @@ async function entfernen() {
   }
 }
 
+const seiteKurz = (s: Port['seite']) => (s === 'Vorne' ? ' vorne' : s === 'Hinten' ? ' hinten' : '')
+const patchText = (p: Port) =>
+  p.patch ? `⇄ ${p.patch.partnerGeraet} · ${p.patch.partnerNummer}${seiteKurz(p.patch.partnerSeite)}` : ''
 const belegungText = (p?: Port) =>
   p?.belegung ? `${p.belegung.kabelnummer} · ${p.belegung.ende}${p.belegung.nummer}` : ''
 </script>
@@ -178,6 +183,8 @@ const belegungText = (p?: Port) =>
                     :aria-label="`Port ${p.nummer} ${p.seite}`" />
                   <button v-if="p.belegung" type="button" class="belegt" :title="`${p.belegung.medientyp} – Anschlüsse anzeigen`"
                     @click="emit('medium', p.belegung.mediumId)">{{ belegungText(p) }}</button>
+                  <button v-else-if="p.patch" type="button" class="belegt patch" :title="`Patchung${p.patch.bezeichnung ? ' ' + p.patch.bezeichnung : ''} – Gerät öffnen`"
+                    @click="emit('geraet', p.patch.partnerGeraetId)">{{ patchText(p) }}</button>
                 </template>
               </td>
             </template>
@@ -186,6 +193,9 @@ const belegungText = (p?: Port) =>
               <td><input v-model="beschriftung[z.einzel.id]" type="text" maxlength="100" :aria-label="`Port ${z.nummer}`" /></td>
               <td><button v-if="z.einzel.belegung" type="button" class="belegt" :title="`${z.einzel.belegung.medientyp} – Anschlüsse anzeigen`"
                 @click="emit('medium', z.einzel.belegung.mediumId)">{{ belegungText(z.einzel) }}</button>
+                <button v-else-if="z.einzel.patch" type="button" class="belegt patch"
+                  :title="`Patchung${z.einzel.patch.bezeichnung ? ' ' + z.einzel.patch.bezeichnung : ''} – Gerät öffnen`"
+                  @click="emit('geraet', z.einzel.patch.partnerGeraetId)">{{ patchText(z.einzel) }}</button>
                 <span v-else class="leise">frei</span></td>
             </template>
           </tr>
@@ -284,6 +294,9 @@ label.inline {
   color: #1b7c83;
   font-weight: 600;
   font-size: 0.8rem;
+}
+.belegt.patch {
+  color: #8250df;
 }
 .gut-text {
   color: var(--gut);

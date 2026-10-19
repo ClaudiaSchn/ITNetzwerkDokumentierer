@@ -93,13 +93,14 @@ public static class AnschlussEndpunkte
                         AnschlussId = p.Anschluss == null ? (int?)null : p.Anschluss.Id,
                         Kabel = p.Anschluss == null ? null : p.Anschluss.Medium.Kabelnummer,
                         Ende = p.Anschluss == null ? (Mediumende?)null : p.Anschluss.Ende,
-                        AnschlussNummer = p.Anschluss == null ? (int?)null : p.Anschluss.Nummer
+                        AnschlussNummer = p.Anschluss == null ? (int?)null : p.Anschluss.Nummer,
+                        Gepatcht = p.Patchende != null
                     }).ToList()
                 })
                 .ToListAsync(abbruch);
             return geraete.Select(g => new GeraetWahlDto(g.Id, g.Bezeichnung, g.Kategorie.ToString(), g.Ports.Select(p => new PortWahlDto(
                 p.Id, p.Nummer, p.Seite.ToString(), p.Bezeichnung, p.Portart, m.Erlaubt.Contains(p.PortartId), p.AnschlussId,
-                p.Kabel is null ? null : $"{p.Kabel} {p.Ende}{p.AnschlussNummer}")).ToList())).ToList();
+                p.Kabel is not null ? $"{p.Kabel} {p.Ende}{p.AnschlussNummer}" : p.Gepatcht ? "gepatcht" : null)).ToList())).ToList();
         }
 
         return Results.Ok(new PortauswahlDto(await Geraete(m.PositionAId), await Geraete(m.PositionBId)));
@@ -165,7 +166,7 @@ public static class AnschlussEndpunkte
         }
 
         var portnummern = Enumerable.Range(eingabe.AbPortnummer, eingabe.Anzahl).ToList();
-        var ports = await db.Ports.Include(p => p.Geraet).Include(p => p.Anschluss).ThenInclude(a => a!.Medium)
+        var ports = await db.Ports.Include(p => p.Geraet).Include(p => p.Anschluss).ThenInclude(a => a!.Medium).Include(p => p.Patchende)
             .Where(p => p.GeraetId == geraet.Id && portnummern.Contains(p.Nummer) && (seite == null || p.Seite == seite))
             .ToListAsync(abbruch);
         if (ports.Select(p => p.Nummer).Distinct().Count() != ports.Count)
@@ -194,7 +195,7 @@ public static class AnschlussEndpunkte
     }
 
     private static Task<Port?> PortLaden(NetzDbContext db, int portId, CancellationToken abbruch) =>
-        db.Ports.Include(p => p.Geraet).Include(p => p.Anschluss).ThenInclude(a => a!.Medium)
+        db.Ports.Include(p => p.Geraet).Include(p => p.Anschluss).ThenInclude(a => a!.Medium).Include(p => p.Patchende)
             .FirstOrDefaultAsync(p => p.Id == portId, abbruch);
 
     /// <summary>Regeln 7 und 8: richtige End-Position, Portart erlaubt, Port frei.</summary>
@@ -217,6 +218,8 @@ public static class AnschlussEndpunkte
             return Fehler.Ungueltig($"{portName} ist {portart} – für dieses Medium nicht erlaubt.");
         }
 
+        if (port.Patchende is not null)
+            return Fehler.Konflikt($"{portName} ist gepatcht. Ein Port ist entweder an ein Kabel angeschlossen oder gepatcht.");
         if (port.Anschluss is { } belegt && belegt.Id != anschluss.Id)
             return Fehler.Konflikt($"{portName} ist bereits belegt ({belegt.Medium.Kabelnummer} {belegt.Ende}{belegt.Nummer}).");
         return null;

@@ -25,6 +25,8 @@ Das Schema setzt das Klassendiagramm [`diagramme/kd_01_datenmodell.puml`](diagra
 | `ports` | Ports der Geräte | `geraet_id`, `nummer`, `seite` (Einzel/Vorne/Hinten), `portart_id`, `bezeichnung` |
 | `medien` | Kabel/Funkstrecken auf Verbindungen | `verbindung_id`, `standort_id`, `medientyp_id`, `kabelnummer`, `anzahl_anschluesse` |
 | `anschluesse` | Enden der Adern/Fasern | `medium_id`, `ende` (A/B), `nummer`, `port_id` |
+| `patchungen` | Patchkabel innerhalb einer Position | `position_id`, `bezeichnung` |
+| `patchenden` | die zwei Enden einer Patchung | `patchung_id`, `nummer` (1/2), `port_id` (eindeutig) |
 | `positionstypen`, `portarten` | Stammdaten | `name` (eindeutig) |
 | `medientypen` | Stammdaten | `name`; erlaubte Portarten in `medientyp_erlaubte_portarten` |
 | `geraetetypen` | Gerätevorlagen | `name`, `kategorie` (Durchgang/Endgeraet) |
@@ -75,6 +77,8 @@ Die Nummern beziehen sich auf die Regeln im [Konzept](Konzept_Phase1.md#regeln).
 | 10 Medium entfernen nur ohne belegte Anschlüsse | Backend + Datenbank | Backend meldet die Anzahl (409); Anschlüsse werden mitgelöscht |
 | 7 Ende A nur an Ports an Position A | Backend | Prüfung beim Anschliessen |
 | 8 Port mit höchstens einem Anschluss belegt | Datenbank | Index auf `anschluesse (port_id)` |
+| 11 Port höchstens einmal gepatcht | Datenbank | Index auf `patchenden (port_id)` |
+| 11 Port entweder angeschlossen oder gepatcht; Patchung nur innerhalb einer Position | Backend | Prüfung beim Patchen und beim Anschliessen |
 | 8 Portart für Medientyp erlaubt | Backend | Prüfung beim Anschliessen |
 | – Mehrere Anschlüsse fortlaufend anschliessen: alles oder nichts | Backend + Datenbank | Eine Transaktion; beim ersten Problem wird nichts gespeichert |
 | 9 Pro Gerät, Nummer und Seite ein Port | Datenbank | Index auf `ports (geraet_id, nummer, seite)` |

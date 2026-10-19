@@ -49,7 +49,7 @@ const portText = (p: { nummer: number; seite: PortWahl['seite']; bezeichnung: st
 /** Freie Ports mit passender Portart an diesem Ende */
 const freiePorts = (ende: Ende) =>
   geraeteAn(ende)
-    .map((g) => ({ g, ports: g.ports.filter((p) => p.erlaubt && p.anschlussId === null) }))
+    .map((g) => ({ g, ports: g.ports.filter((p) => p.erlaubt && p.belegtDurch === null) }))
     .filter((x) => x.ports.length > 0)
 
 const keineGeraete = (ende: Ende) => geraeteAn(ende).length === 0
@@ -92,7 +92,7 @@ watch(() => serie.geraetId, () => {
   const g = serieGeraet.value
   if (!g) return
   serie.seite = g.kategorie === 'Durchgang' ? 'Hinten' : 'Einzel'
-  const p = g.ports.find((x) => x.erlaubt && x.anschlussId === null && (g.kategorie !== 'Durchgang' || x.seite === serie.seite))
+  const p = g.ports.find((x) => x.erlaubt && x.belegtDurch === null && (g.kategorie !== 'Durchgang' || x.seite === serie.seite))
   serie.abPort = p?.nummer ?? 1
 })
 

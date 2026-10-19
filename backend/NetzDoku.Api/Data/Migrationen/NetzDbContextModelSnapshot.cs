@@ -404,6 +404,66 @@ namespace NetzDoku.Api.Data.Migrationen
                         });
                 });
 
+            modelBuilder.Entity("NetzDoku.Api.Modell.Patchende", b =>
+                {
+                    b.Property<int>("PatchungId")
+                        .HasColumnType("integer")
+                        .HasColumnName("patchung_id");
+
+                    b.Property<int>("Nummer")
+                        .HasColumnType("integer")
+                        .HasColumnName("nummer");
+
+                    b.Property<int>("PortId")
+                        .HasColumnType("integer")
+                        .HasColumnName("port_id");
+
+                    b.HasKey("PatchungId", "Nummer")
+                        .HasName("pk_patchenden");
+
+                    b.HasIndex("PortId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_patchenden_port_id");
+
+                    b.ToTable("patchenden", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_patchenden_nummer", "nummer IN (1, 2)");
+                        });
+                });
+
+            modelBuilder.Entity("NetzDoku.Api.Modell.Patchung", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Bezeichnung")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("bezeichnung");
+
+                    b.Property<int>("PositionId")
+                        .HasColumnType("integer")
+                        .HasColumnName("position_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_patchungen");
+
+                    b.HasIndex("PositionId")
+                        .HasDatabaseName("ix_patchungen_position_id");
+
+                    b.ToTable("patchungen", (string)null);
+                });
+
             modelBuilder.Entity("NetzDoku.Api.Modell.Plan", b =>
                 {
                     b.Property<int>("Id")
@@ -949,6 +1009,39 @@ namespace NetzDoku.Api.Data.Migrationen
                     b.Navigation("Plan");
                 });
 
+            modelBuilder.Entity("NetzDoku.Api.Modell.Patchende", b =>
+                {
+                    b.HasOne("NetzDoku.Api.Modell.Patchung", "Patchung")
+                        .WithMany("Enden")
+                        .HasForeignKey("PatchungId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_patchenden_patchungen_patchung_id");
+
+                    b.HasOne("NetzDoku.Api.Modell.Port", "Port")
+                        .WithOne("Patchende")
+                        .HasForeignKey("NetzDoku.Api.Modell.Patchende", "PortId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_patchenden_ports_port_id");
+
+                    b.Navigation("Patchung");
+
+                    b.Navigation("Port");
+                });
+
+            modelBuilder.Entity("NetzDoku.Api.Modell.Patchung", b =>
+                {
+                    b.HasOne("NetzDoku.Api.Modell.Position", "Position")
+                        .WithMany("Patchungen")
+                        .HasForeignKey("PositionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_patchungen_positionen_position_id");
+
+                    b.Navigation("Position");
+                });
+
             modelBuilder.Entity("NetzDoku.Api.Modell.Plan", b =>
                 {
                     b.HasOne("NetzDoku.Api.Modell.Plan", "Bezugsplan")
@@ -1102,6 +1195,11 @@ namespace NetzDoku.Api.Data.Migrationen
                     b.Navigation("Anschluesse");
                 });
 
+            modelBuilder.Entity("NetzDoku.Api.Modell.Patchung", b =>
+                {
+                    b.Navigation("Enden");
+                });
+
             modelBuilder.Entity("NetzDoku.Api.Modell.Plan", b =>
                 {
                     b.Navigation("Messstrecken");
@@ -1112,6 +1210,8 @@ namespace NetzDoku.Api.Data.Migrationen
             modelBuilder.Entity("NetzDoku.Api.Modell.Port", b =>
                 {
                     b.Navigation("Anschluss");
+
+                    b.Navigation("Patchende");
                 });
 
             modelBuilder.Entity("NetzDoku.Api.Modell.Position", b =>
@@ -1119,6 +1219,8 @@ namespace NetzDoku.Api.Data.Migrationen
                     b.Navigation("Geraete");
 
                     b.Navigation("Kommentare");
+
+                    b.Navigation("Patchungen");
                 });
 
             modelBuilder.Entity("NetzDoku.Api.Modell.Standort", b =>

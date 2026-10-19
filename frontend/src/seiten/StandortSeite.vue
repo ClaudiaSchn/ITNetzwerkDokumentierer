@@ -30,6 +30,7 @@ import VerbindungPanel from '../komponenten/VerbindungPanel.vue'
 import PositionGeraete from '../komponenten/PositionGeraete.vue'
 import GeraetPanel from '../komponenten/GeraetPanel.vue'
 import MediumPanel from '../komponenten/MediumPanel.vue'
+import PositionPatchungen from '../komponenten/PositionPatchungen.vue'
 
 const props = defineProps<{ id: number }>()
 const route = useRoute()
@@ -662,7 +663,7 @@ watch(alleStockwerke, positionenLaden)
         @portart-angelegt="(p: Portart) => (portarten = [...portarten, p].sort((a, b) => a.name.localeCompare(b.name, 'de')))" />
       <GeraetPanel v-else-if="geraetAuswahlId !== null" :geraet-id="geraetAuswahlId" @schliessen="geraetAuswahlId = null"
         @zur-position="zurPosition" @geaendert="geraeteGeaendert" @entfernt="geraetEntfernt"
-        @medium="(id: number) => (mediumAuswahlId = id)" />
+        @medium="(id: number) => (mediumAuswahlId = id)" @geraet="geraetOeffnen" />
       <PositionenPanel v-else-if="plan.referenziert" :plan="plan" :standort-id="standort.id" :positionen="positionen"
         :typen="typen" :entwurf="entwurf" :auswahl="auswahl" :verschoben-nach="verschobenNach" :vorschlag="vorschlag"
         @gespeichert="positionGespeichert" @geloescht="positionGeloescht" @abbrechen="schliessen"
@@ -673,6 +674,8 @@ watch(alleStockwerke, positionenLaden)
             :aktualisierung="geraeteAktualisierung" @oeffnen="geraetOeffnen" @geaendert="geraeteGeaendert"
             @geraetetyp-angelegt="(t: Geraetetyp) => (geraetetypen = [...geraetetypen, t].sort((a, b) => a.name.localeCompare(b.name, 'de')))"
             @portart-angelegt="(p: Portart) => (portarten = [...portarten, p].sort((a, b) => a.name.localeCompare(b.name, 'de')))" />
+          <PositionPatchungen v-if="auswahl" :position="auswahl" :aktualisierung="geraeteAktualisierung"
+            @geaendert="geraeteAktualisierung++" @geraet="geraetOeffnen" />
           <PositionVerbindungen v-if="auswahl" :position="auswahl" :verbindungen="verbindungen"
             @verbinden="verbindenStarten" @oeffnen="verbindungOeffnen" @loeschen="verbindungLoeschen" />
         </template>

@@ -27,6 +27,8 @@ public class NetzDbContext(DbContextOptions<NetzDbContext> optionen) : DbContext
     public DbSet<Port> Ports => Set<Port>();
     public DbSet<Medium> Medien => Set<Medium>();
     public DbSet<Anschluss> Anschluesse => Set<Anschluss>();
+    public DbSet<Patchung> Patchungen => Set<Patchung>();
+    public DbSet<Patchende> Patchenden => Set<Patchende>();
 
     // Stammdaten
     public DbSet<Positionstyp> Positionstypen => Set<Positionstyp>();
@@ -169,6 +171,24 @@ public class NetzDbContext(DbContextOptions<NetzDbContext> optionen) : DbContext
 
     private static void KonfiguriereInfrastruktur(ModelBuilder modell)
     {
+        modell.Entity<Patchung>(e =>
+        {
+            // Position nicht löschbar, solange Patchungen daran hängen
+            e.HasOne(p => p.Position).WithMany(p => p.Patchungen)
+                .HasForeignKey(p => p.PositionId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modell.Entity<Patchende>(e =>
+        {
+            e.HasKey(x => new { x.PatchungId, x.Nummer });
+            e.HasOne(x => x.Patchung).WithMany(p => p.Enden)
+                .HasForeignKey(x => x.PatchungId).OnDelete(DeleteBehavior.Cascade);
+            // Ein Port ist höchstens einmal gepatcht; Gerät nicht löschbar, solange gepatcht
+            e.HasOne(x => x.Port).WithOne(p => p.Patchende)
+                .HasForeignKey<Patchende>(x => x.PortId).OnDelete(DeleteBehavior.Restrict);
+            e.ToTable(t => t.HasCheckConstraint("ck_patchenden_nummer", "nummer IN (1, 2)"));
+        });
+
         modell.Entity<Geraet>(e =>
         {
             // Regel 10: Position nicht löschbar, solange Geräte daran hängen
