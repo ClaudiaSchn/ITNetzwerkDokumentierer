@@ -11,7 +11,8 @@ import {
   type Standort,
   type Verbindung,
   type Medientyp,
-  type Portart
+  type Portart,
+  type Geraetetyp
 } from '../api'
 import { formatDrehung, formatMassstab, formatZahl } from '../geometrie'
 import { naechsteBezeichnung, stockwerkText } from '../format'
@@ -26,6 +27,8 @@ import PlanEinstellungen from '../komponenten/PlanEinstellungen.vue'
 import PositionVerbindungen from '../komponenten/PositionVerbindungen.vue'
 import VerbindenPanel from '../komponenten/VerbindenPanel.vue'
 import VerbindungPanel from '../komponenten/VerbindungPanel.vue'
+import PositionGeraete from '../komponenten/PositionGeraete.vue'
+import GeraetPanel from '../komponenten/GeraetPanel.vue'
 
 const props = defineProps<{ id: number }>()
 const route = useRoute()
@@ -88,6 +91,10 @@ const verbindetGerade = ref(false)
 const verbindungAuswahlId = ref<number | null>(null)
 const verbindungAuswahl = computed(() => verbindungen.value.find((v) => v.id === verbindungAuswahlId.value) ?? null)
 const medientypen = ref<Medientyp[]>([])
+/** Geöffnetes Gerät (Seitenleiste mit Ports); die Position bleibt ausgewählt */
+const geraetAuswahlId = ref<number | null>(null)
+const geraetetypen = ref<Geraetetyp[]>([])
+const geraeteAktualisierung = ref(0)
 const portarten = ref<Portart[]>([])
 
 const auswahl = computed(() => positionen.value.find((p) => p.id === auswahlId.value) ?? null)
@@ -152,13 +159,15 @@ async function planlisteLaden() {
 
 async function positionenLaden() {
   if (!plan.value?.referenziert) return
-  const [liste, t, v, mt, pa] = await Promise.all([
+  const [liste, t, v, mt, pa, gt] = await Promise.all([
     api.positionenImPlan(plan.value.id, alleStockwerke.value),
     api.positionstypen(),
     api.verbindungen(props.id),
     api.medientypen(),
-    api.portarten()
+    api.portarten(),
+    api.geraetetypen()
   ])
+  geraetetypen.value = gt
   positionen.value = liste
   typen.value = t
   verbindungen.value = v
@@ -298,6 +307,7 @@ function setzenUmschalten() {
 /** Panel schliessen: Entwurf verwerfen, Auswahl aufheben */
 function schliessen() {
   verbindungAuswahlId.value = null
+  geraetAuswahlId.value = null
   entwurf.value = null
   auswahlId.value = null
   verschiebenAktiv.value = false
@@ -334,12 +344,37 @@ function positionGeloescht(id: number) {
 
 function auswaehlen(id: number) {
   verbindungAuswahlId.value = null
+  geraetAuswahlId.value = null
   entwurf.value = null
   verschobenNach.value = null
   verschiebenAktiv.value = false
   auswahlId.value = id
   const p = positionen.value.find((x) => x.id === id)
   if (p) ansicht.value?.zentrieren({ u: p.u, v: p.v })
+}
+
+// --- Geräte ---
+
+function geraetOeffnen(id: number) {
+  verbindungAuswahlId.value = null
+  entwurf.value = null
+  geraetAuswahlId.value = id
+}
+
+async function geraeteGeaendert() {
+  geraeteAktualisierung.value++
+  await positionenLaden() // Zähler für die Löschsperre der Position
+}
+
+async function geraetEntfernt() {
+  geraetAuswahlId.value = null
+  melden('Gerät entfernt.')
+  await geraeteGeaendert()
+}
+
+function zurPosition(id: number) {
+  geraetAuswahlId.value = null
+  if (positionen.value.some((p) => p.id === id)) auswaehlen(id)
 }
 
 // --- Verbindungen ---
@@ -524,6 +559,7 @@ function taste(e: KeyboardEvent) {
   if (e.key !== 'Escape' || werkzeugAktiv.value) return
   if (modus.value === 'importieren' || modus.value === 'einstellungen') modus.value = 'ansehen'
   else if (modus.value === 'verbinden') verbindenBeenden()
+  else if (geraetAuswahlId.value !== null) geraetAuswahlId.value = null
   else if (entwurf.value || auswahlId.value !== null || verbindungAuswahlId.value !== null) schliessen()
   else if (modus.value === 'setzen') modus.value = 'ansehen'
 }
@@ -616,12 +652,18 @@ watch(alleStockwerke, positionenLaden)
         @geaendert="verbindungenNeuLaden" @loeschen="verbindungLoeschen"
         @medientyp-angelegt="(t: Medientyp) => (medientypen = [...medientypen, t].sort((a, b) => a.name.localeCompare(b.name, 'de')))"
         @portart-angelegt="(p: Portart) => (portarten = [...portarten, p].sort((a, b) => a.name.localeCompare(b.name, 'de')))" />
+      <GeraetPanel v-else-if="geraetAuswahlId !== null" :geraet-id="geraetAuswahlId" @schliessen="geraetAuswahlId = null"
+        @zur-position="zurPosition" @geaendert="geraeteGeaendert" @entfernt="geraetEntfernt" />
       <PositionenPanel v-else-if="plan.referenziert" :plan="plan" :standort-id="standort.id" :positionen="positionen"
         :typen="typen" :entwurf="entwurf" :auswahl="auswahl" :verschoben-nach="verschobenNach" :vorschlag="vorschlag"
         @gespeichert="positionGespeichert" @geloescht="positionGeloescht" @abbrechen="schliessen"
         @auswaehlen="auswaehlen" @verschieben="(a: boolean) => { verschiebenAktiv = a; if (!a) verschobenNach = null }"
         @typ-angelegt="(t: Positionstyp) => (typen = [...typen, t].sort((a, b) => a.name.localeCompare(b.name, 'de')))">
         <template #auswahl>
+          <PositionGeraete v-if="auswahl" :position="auswahl" :geraetetypen="geraetetypen" :portarten="portarten"
+            :aktualisierung="geraeteAktualisierung" @oeffnen="geraetOeffnen" @geaendert="geraeteGeaendert"
+            @geraetetyp-angelegt="(t: Geraetetyp) => (geraetetypen = [...geraetetypen, t].sort((a, b) => a.name.localeCompare(b.name, 'de')))"
+            @portart-angelegt="(p: Portart) => (portarten = [...portarten, p].sort((a, b) => a.name.localeCompare(b.name, 'de')))" />
           <PositionVerbindungen v-if="auswahl" :position="auswahl" :verbindungen="verbindungen"
             @verbinden="verbindenStarten" @oeffnen="verbindungOeffnen" @loeschen="verbindungLoeschen" />
         </template>
