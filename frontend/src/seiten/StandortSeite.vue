@@ -32,6 +32,8 @@ import GeraetPanel from '../komponenten/GeraetPanel.vue'
 import MediumPanel from '../komponenten/MediumPanel.vue'
 import PositionPatchungen from '../komponenten/PositionPatchungen.vue'
 import WegPanel from '../komponenten/WegPanel.vue'
+import PositionKommentare from '../komponenten/PositionKommentare.vue'
+import KommentarePanel from '../komponenten/KommentarePanel.vue'
 
 const props = defineProps<{ id: number }>()
 const route = useRoute()
@@ -56,7 +58,7 @@ const uploadFehler = ref<string | null>(null)
  * verbinden = Klick auf eine Position verbindet sie mit verbindenVon,
  * importieren / einstellungen = entsprechende Seitenleiste
  */
-type Modus = 'ansehen' | 'setzen' | 'verbinden' | 'weg' | 'kalibrieren' | 'referenzieren' | 'importieren' | 'einstellungen'
+type Modus = 'ansehen' | 'setzen' | 'verbinden' | 'weg' | 'kommentare' | 'kalibrieren' | 'referenzieren' | 'importieren' | 'einstellungen'
 const modus = ref<Modus>('ansehen')
 const meldung = ref<string | null>(null)
 const meldungFehler = ref(false)
@@ -268,7 +270,7 @@ function kontrolle(links: Punkt | null, rechts: Punkt | null) {
 
 // --- Plan importieren / Einstellungen ---
 
-function seitenleiste(ziel: 'importieren' | 'einstellungen') {
+function seitenleiste(ziel: 'importieren' | 'einstellungen' | 'kommentare') {
   schliessen()
   modus.value = modus.value === ziel ? 'ansehen' : ziel
 }
@@ -438,6 +440,37 @@ function verbindungOeffnen(id: number) {
   verbindungAuswahlId.value = id
 }
 
+// --- Kommentare ---
+
+/** Offene Kommentare am ganzen Standort (Zahl im Knopf) */
+const offeneKommentare = ref(0)
+async function kommentareZaehlen() {
+  try {
+    offeneKommentare.value = (await api.standortKommentare(props.id, 'Offen')).length
+  } catch {
+    // Zahl ist nur Hinweis; Fehler zeigt die Liste selbst
+  }
+}
+onMounted(kommentareZaehlen)
+
+async function kommentareGeaendert() {
+  await Promise.all([positionenLaden(), kommentareZaehlen()])
+}
+
+/** Aus der Kommentar-Übersicht zur Position springen (bei Bedarf alle Stockwerke einblenden) */
+async function kommentarPosition(id: number) {
+  if (!sichtbareIds.value.has(id) && !ueberblick.value) {
+    alleStockwerke.value = true
+    await positionenLaden()
+  }
+  if (!sichtbareIds.value.has(id)) {
+    melden('Diese Position liegt ausserhalb dieses Plans. Bitte den passenden Plan wählen.', true)
+    return
+  }
+  modus.value = 'ansehen'
+  auswaehlen(id)
+}
+
 // --- Wegsuche ---
 
 const wegPanel = ref<InstanceType<typeof WegPanel> | null>(null)
@@ -570,6 +603,7 @@ const markierungen = computed<Markierung[]>(() => {
       art: 'position',
       text: p.bezeichnung,
       klickbar: true,
+      zaehler: p.anzahlOffeneKommentare,
       aktiv,
       verschiebbar: aktiv && verschiebenAktiv.value
     }
@@ -612,7 +646,7 @@ const bezugsplanName = computed(() => plaene.value.find((p) => p.id === plan.val
 // Esc: Entwurf/Auswahl schliessen, dann Setzen-Modus beenden
 function taste(e: KeyboardEvent) {
   if (e.key !== 'Escape' || werkzeugAktiv.value) return
-  if (modus.value === 'importieren' || modus.value === 'einstellungen') modus.value = 'ansehen'
+  if (modus.value === 'importieren' || modus.value === 'einstellungen' || modus.value === 'kommentare') modus.value = 'ansehen'
   else if (modus.value === 'verbinden') verbindenBeenden()
   else if (modus.value === 'weg') wegBeenden()
   else if (mediumAuswahlId.value !== null) mediumAuswahlId.value = null
@@ -666,6 +700,10 @@ watch(alleStockwerke, positionenLaden)
             title="Klick in den Plan setzt eine neue Position (Esc beendet)" @click="setzenUmschalten">
             {{ modus === 'setzen' ? '✓ Position setzen' : '＋ Position setzen' }}
           </button>
+          <button type="button" class="zweitrangig klein-btn" :class="{ gedrueckt: modus === 'kommentare' }"
+            title="Kommentare dieses Standorts auswerten" @click="seitenleiste('kommentare')">
+            Kommentare<span v-if="offeneKommentare" class="zahl">{{ offeneKommentare }}</span>
+          </button>
           <button v-if="plan.referenziert" type="button" class="zweitrangig klein-btn" :class="{ gedrueckt: modus === 'weg' }"
             title="Wege zwischen Positionen oder Geräten suchen" @click="modus === 'weg' ? wegBeenden() : wegStarten()">Weg suchen</button>
           <button type="button" class="zweitrangig klein-btn" :class="{ gedrueckt: modus === 'einstellungen' }"
@@ -706,6 +744,8 @@ watch(alleStockwerke, positionenLaden)
         @gespeichert="planGeaendert" @geloescht="planGeloescht" @abbrechen="modus = 'ansehen'" @lage-aendern="lageAendern" />
       <VerbindenPanel v-else-if="modus === 'verbinden' && verbindenAb" :von="verbindenAb" :positionen="positionen"
         :verbindungen="verbindungen" :speichert="verbindetGerade" @waehlen="verbindenMit" @fertig="verbindenBeenden" />
+      <KommentarePanel v-else-if="modus === 'kommentare'" :standort-id="standort.id" @schliessen="modus = 'ansehen'"
+        @position="kommentarPosition" @geaendert="kommentareGeaendert" />
       <WegPanel v-else-if="modus === 'weg'" ref="wegPanel" :standort-id="standort.id" :positionen="positionen"
         :medientypen="medientypen" :start-position="wegStart" :verlauf-port="wegVerlaufPort" @fertig="wegBeenden"
         @markieren="wegMarkieren" @geraet="(id: number) => ausWeg('geraet', id)" @medium="(id: number) => ausWeg('medium', id)" />
@@ -725,6 +765,7 @@ watch(alleStockwerke, positionenLaden)
         @auswaehlen="auswaehlen" @verschieben="(a: boolean) => { verschiebenAktiv = a; if (!a) verschobenNach = null }"
         @typ-angelegt="(t: Positionstyp) => (typen = [...typen, t].sort((a, b) => a.name.localeCompare(b.name, 'de')))">
         <template #auswahl>
+          <PositionKommentare v-if="auswahl" :position="auswahl" @geaendert="kommentareGeaendert" />
           <PositionGeraete v-if="auswahl" :position="auswahl" :geraetetypen="geraetetypen" :portarten="portarten"
             :aktualisierung="geraeteAktualisierung" @oeffnen="geraetOeffnen" @geaendert="geraeteGeaendert"
             @geraetetyp-angelegt="(t: Geraetetyp) => (geraetetypen = [...geraetetypen, t].sort((a, b) => a.name.localeCompare(b.name, 'de')))"
@@ -819,6 +860,19 @@ watch(alleStockwerke, positionenLaden)
   margin: 0;
   font-weight: 400;
   font-size: 0.85rem;
+}
+.zahl {
+  display: inline-block;
+  margin-left: 0.35rem;
+  min-width: 1.1rem;
+  padding: 0 0.3rem;
+  border-radius: 0.6rem;
+  background: #cf222e;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.1rem;
+  text-align: center;
 }
 .gedrueckt {
   background: var(--hintergrund);
