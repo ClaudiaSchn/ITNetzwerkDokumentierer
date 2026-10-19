@@ -151,6 +151,37 @@ export interface Verbindung {
   anzahlMedien: number
 }
 
+export interface Portart {
+  id: number
+  name: string
+}
+
+/** Medientyp mit den Portarten, an die er angeschlossen werden darf */
+export interface Medientyp {
+  id: number
+  name: string
+  portarten: Portart[]
+}
+
+/** Medium auf einer Verbindung; belegtA/B = angeschlossene Anschlüsse am Ende A bzw. B */
+export interface Medium {
+  id: number
+  version: number
+  verbindungId: number
+  kabelnummer: string
+  medientypId: number
+  medientyp: string
+  anzahlAnschluesse: number
+  belegtA: number
+  belegtB: number
+}
+
+export interface MediumDaten {
+  kabelnummer: string
+  medientypId: number
+  anzahlAnschluesse: number
+}
+
 export interface Status {
   backend: string
   datenbank: string
@@ -292,5 +323,42 @@ export const api = {
     }),
 
   verbindungLoeschen: (id: number, version: number) =>
-    anfrage<void>(`/api/verbindungen/${id}?version=${version}`, { method: 'DELETE' })
+    anfrage<void>(`/api/verbindungen/${id}?version=${version}`, { method: 'DELETE' }),
+
+  portarten: () => anfrage<Portart[]>('/api/portarten'),
+
+  portartAnlegen: (name: string) =>
+    anfrage<Portart>('/api/portarten', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    }),
+
+  medientypen: () => anfrage<Medientyp[]>('/api/medientypen'),
+
+  medientypAnlegen: (name: string, portartIds: number[]) =>
+    anfrage<Medientyp>('/api/medientypen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, portartIds })
+    }),
+
+  medien: (verbindungId: number) => anfrage<Medium[]>(`/api/verbindungen/${verbindungId}/medien`),
+
+  mediumZuweisen: (verbindungId: number, daten: MediumDaten) =>
+    anfrage<Medium>(`/api/verbindungen/${verbindungId}/medien`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(daten)
+    }),
+
+  mediumAendern: (id: number, version: number, daten: MediumDaten) =>
+    anfrage<Medium>(`/api/medien/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version, ...daten })
+    }),
+
+  mediumEntfernen: (id: number, version: number) =>
+    anfrage<void>(`/api/medien/${id}?version=${version}`, { method: 'DELETE' })
 }

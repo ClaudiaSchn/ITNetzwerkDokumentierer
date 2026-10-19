@@ -8,12 +8,11 @@ import { stockwerkText } from '../format'
 const props = defineProps<{
   position: PositionImPlan
   verbindungen: Verbindung[]
-  /** Ids der Positionen, die im aktuellen Plan zu sehen sind */
-  sichtbar: Set<number>
 }>()
 const emit = defineEmits<{
   verbinden: []
-  auswaehlen: [id: number]
+  /** Verbindung öffnen (Medien usw.) */
+  oeffnen: [id: number]
   loeschen: [verbindung: Verbindung]
 }>()
 
@@ -48,13 +47,11 @@ function loeschen(v: Verbindung) {
     <p v-if="eigene.length === 0" class="leise klein">Noch keine Verbindungen.</p>
     <ul class="liste">
       <li v-for="e in eigene" :key="e.v.id">
-        <button type="button" class="partner" :disabled="!sichtbar.has(e.partner.id)"
-          :title="sichtbar.has(e.partner.id) ? 'Position anzeigen' : 'In diesem Plan nicht sichtbar'"
-          @click="emit('auswaehlen', e.partner.id)">
+        <button type="button" class="partner" title="Verbindung mit Medien anzeigen" @click="emit('oeffnen', e.v.id)">
           <span class="name">{{ e.istA ? '→' : '←' }} {{ e.partner.bezeichnung }}</span>
           <span class="leise klein">
             {{ e.partner.positionstyp }} · {{ stockwerkText(e.partner.stockwerk) }} · {{ formatZahl(e.v.laengeMeter, 0) }} m
-            <template v-if="e.v.anzahlMedien"> · {{ e.v.anzahlMedien === 1 ? '1 Medium' : `${e.v.anzahlMedien} Medien` }}</template>
+            · {{ e.v.anzahlMedien === 1 ? '1 Medium' : `${e.v.anzahlMedien} Medien` }}
           </span>
         </button>
         <button type="button" class="weg" :class="{ bestaetigen: bestaetigen === e.v.id }"
@@ -113,11 +110,8 @@ h3 {
   border-radius: 0;
   padding: 0.4rem 0.25rem;
 }
-.partner:not(:disabled):hover {
+.partner:hover {
   background: var(--hintergrund);
-}
-.partner:disabled {
-  opacity: 1;
 }
 .name {
   font-weight: 600;
